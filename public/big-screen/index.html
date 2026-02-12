@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <link rel="stylesheet" href="/big-screen/css/index.css" />
+  </head>
+
+  <body>
+    <header>
+      <h1>中国体育彩票·攻防演练</h1>
+      <div class="showTime">当前时间：2020年3月17-0时54分14秒</div>
+      <script>
+        var t = null
+        t = setTimeout(time, 1000) //開始运行
+        function time() {
+          clearTimeout(t) //清除定时器
+          dt = new Date()
+          var y = dt.getFullYear()
+          var mt = dt.getMonth() + 1
+          var day = dt.getDate()
+          var h = dt.getHours() //获取时
+          var m = dt.getMinutes() //获取分
+          var s = dt.getSeconds() //获取秒
+          document.querySelector('.showTime').innerHTML =
+            '当前时间：' + y + '年' + mt + '月' + day + '日' + h + '时' + m + '分' + s + '秒'
+          t = setTimeout(time, 1000) //设定定时器，循环运行
+        }
+      </script>
+    </header>
+    <section class="mainbox">
+      <div class="column">
+        <div class="panel line">
+          <h2 style="font-size: 0.35rem">攻击队排名</h2>
+          <div class="chart" id="barRaceChart1"></div>
+          <!-- 确保 id 或 class 与示例代码一致 -->
+          <div class="panel-footer"></div>
+        </div>
+        <div class="panel bar2">
+          <h2 style="font-size: 0.35rem">省市失分一览</h2>
+          <div class="chart" id="provinceLossChart"></div>
+          <!-- 添加 id -->
+          <div class="panel-footer"></div>
+        </div>
+      </div>
+      <div class="column">
+        <div class="no">
+          <div class="no-hd">
+            <ul>
+              <li>125811</li>
+              <li id="firstPlaceData">104563</li>
+            </ul>
+          </div>
+          <div class="no-bd">
+            <ul>
+              <li>被攻击总次数</li>
+              <li>第一名攻击队</li>
+            </ul>
+          </div>
+        </div>
+        <div class="map">
+          <div class="chart"></div>
+          <div class="map1"></div>
+          <div class="map2"></div>
+          <div class="map3"></div>
+        </div>
+      </div>
+      <div class="column">
+        <div class="panel bar1">
+          <h2 style="font-size: 0.35rem">被攻击次数TOP20</h2>
+          <div class="chart"></div>
+          <div class="panel-footer"></div>
+        </div>
+      </div>
+    </section>
+    <script src="/big-screen/js/flexible.js"></script>
+    <script src="/big-screen/js/jquery.js"></script>
+    <script src="/big-screen/js/echarts.min.js"></script>
+    <script src="/big-screen/js/index.js"></script>
+    <script src="/big-screen/js/china.js"></script>
+    <script src="/big-screen/js/myMap.js"></script>
+  </body>
+</html>

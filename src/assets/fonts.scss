@@ -1,0 +1,408 @@
+// src/assets/styles/fonts.scss
+
+/* 定义字体变量 */
+:root {
+  --font-family-pingfang: 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+  --font-family-code: 'SF Mono', Monaco, Consolas, 'Courier New', monospace;
+
+  --font-size-xs: 12px;
+  --font-size-sm: 13px;
+  --font-size-base: 14px;
+  --font-size-md: 16px;
+  --font-size-lg: 18px;
+  --font-size-xl: 20px;
+  --font-size-xxl: 24px;
+  --font-size-xxxl: 28px;
+
+  --font-weight-light: 300;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-heavy: 800;
+}
+
+/* PingFang SC OTF 字体定义 */
+@font-face {
+  font-family: 'PingFang SC';
+  src: url('/fonts/pingFangsc-Light.otf') format('opentype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+  font-stretch: normal;
+}
+
+@font-face {
+  font-family: 'PingFang SC';
+  src: url('/fonts/pingFangsc-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  font-stretch: normal;
+}
+
+@font-face {
+  font-family: 'PingFang SC';
+  src: url('/fonts/pingFangsc-Medium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  font-stretch: normal;
+}
+
+@font-face {
+  font-family: 'PingFang SC';
+  src: url('/fonts/pingFangsc-Semibold.otf') format('opentype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+  font-stretch: normal;
+}
+
+@font-face {
+  font-family: 'PingFang SC';
+  src: url('/fonts/pingFangsc-Bold.otf') format('opentype');
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'PingFang SC';
+  src: url('/fonts/pingFangsc-Heavy.otf') format('opentype');
+  font-weight: 900;
+  font-style: normal;
+}
+
+/* 全局强制使用PingFang SC */
+* {
+  font-family: var(--font-family-pingfang) !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'kern' 1;
+  font-variant-ligatures: common-ligatures;
+  font-kerning: normal;
+}
+
+/* Body基础设置 */
+html,
+body {
+  font-family: var(--font-family-pingfang) !important;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+  line-height: 1.6;
+  letter-spacing: 0.2px;
+  color: var(--el-text-color-primary);
+  background: var(--el-bg-color);
+}
+
+/* 标题字体 */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-family-pingfang) !important;
+  font-weight: var(--font-weight-semibold) !important;
+  line-height: 1.4;
+  margin: 0 0 1em 0;
+  color: var(--el-text-color-primary);
+  letter-spacing: 0.1px;
+}
+
+h1 {
+  font-size: var(--font-size-xxxl) !important;
+  font-weight: var(--font-weight-bold) !important;
+  letter-spacing: 0.5px;
+}
+h2 {
+  font-size: var(--font-size-xxl) !important;
+  font-weight: var(--font-weight-semibold) !important;
+}
+h3 {
+  font-size: var(--font-size-xl) !important;
+  font-weight: var(--font-weight-semibold) !important;
+}
+h4 {
+  font-size: var(--font-size-lg) !important;
+  font-weight: var(--font-weight-medium) !important;
+}
+h5 {
+  font-size: var(--font-size-md) !important;
+  font-weight: var(--font-weight-medium) !important;
+}
+h6 {
+  font-size: var(--font-size-base) !important;
+  font-weight: var(--font-weight-medium) !important;
+}
+
+/* Element Plus 全局覆盖 */
+.el-button,
+.el-input__inner,
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner,
+.el-radio__label,
+.el-checkbox__label,
+.el-switch__label,
+.el-form-item__label,
+.el-table,
+.el-table th,
+.el-table td,
+.el-card__header,
+.el-card__body,
+.el-dialog__header,
+.el-dialog__body,
+.el-dialog__footer,
+.el-drawer__header,
+.el-drawer__body,
+.el-drawer__footer,
+.el-message,
+.el-notification,
+.el-menu,
+.el-sub-menu__title,
+.el-menu-item,
+.el-breadcrumb__inner,
+.el-tabs__item,
+.el-tabs__nav,
+.el-step__title,
+.el-step__description,
+.el-alert__title,
+.el-alert__description,
+.el-progress__text,
+.el-rate__text,
+.el-slider__button,
+.el-color-picker__mask,
+.el-color-picker__empty,
+.el-cascader-node__label,
+.el-cascader__dropdown,
+.el-date-editor .el-input__inner,
+.el-time-panel,
+.el-color-predefine__color-selector,
+.el-color-dropdown__link-btn,
+.el-pagination,
+.el-pagination__total,
+.el-pagination__sizes,
+.el-pagination__jump,
+.el-popover,
+.el-popconfirm__main,
+.el-tooltip,
+.el-dropdown-menu__item,
+.el-select-dropdown__item,
+.el-select-dropdown__empty,
+.el-autocomplete-suggestion__list,
+.el-popper,
+.el-popper__arrow,
+.el-loading-text,
+.el-loading-spinner,
+.el-image-viewer__btn,
+.el-upload__tip,
+.el-result__title,
+.el-result__subtitle,
+.el-empty__description,
+.el-skeleton__text,
+.el-skeleton__button,
+.el-skeleton__p,
+.el-collapse-item__header,
+.el-collapse-item__wrap,
+.el-timeline-item__wrapper,
+.el-timeline-item__timestamp,
+.el-calendar__title,
+.el-calendar-table thead th,
+.el-calendar-table tr td,
+.el-tree-node__label,
+.el-tree-node__content,
+.el-transfer-panel__header,
+.el-transfer-panel__list,
+.el-transfer__buttons,
+.el-upload-list__item-name,
+.el-upload-list__item-status-label,
+.el-page-header__left,
+.el-page-header__title,
+.el-page-header__content,
+.el-avatar,
+.el-badge__content,
+.el-link,
+.el-divider__text,
+.el-text {
+  font-family: var(--font-family-pingfang) !important;
+}
+
+/* 特定组件字体粗细优化 */
+.el-button {
+  font-weight: var(--font-weight-medium) !important;
+  letter-spacing: 0.3px;
+}
+
+.el-form-item__label {
+  font-weight: var(--font-weight-medium) !important;
+  font-size: var(--font-size-base) !important;
+}
+
+.el-card__header {
+  font-weight: var(--font-weight-semibold) !important;
+  font-size: var(--font-size-md) !important;
+  letter-spacing: 0.2px;
+}
+
+.el-table th {
+  font-weight: var(--font-weight-semibold) !important;
+  font-size: var(--font-size-sm) !important;
+}
+
+.el-table td {
+  font-size: var(--font-size-sm) !important;
+  font-weight: var(--font-weight-normal) !important;
+}
+
+.el-dialog__title {
+  font-weight: var(--font-weight-semibold) !important;
+  font-size: var(--font-size-lg) !important;
+  letter-spacing: 0.2px;
+}
+
+.el-notification__title {
+  font-weight: var(--font-weight-semibold) !important;
+  font-size: var(--font-size-md) !important;
+}
+
+.el-message__content {
+  font-weight: var(--font-weight-normal) !important;
+  font-size: var(--font-size-base) !important;
+}
+
+.el-select-dropdown__item {
+  font-size: var(--font-size-base) !important;
+  font-weight: var(--font-weight-normal) !important;
+}
+
+.el-dropdown-menu__item {
+  font-size: var(--font-size-base) !important;
+  font-weight: var(--font-weight-normal) !important;
+}
+
+/* 代码、等宽字体 */
+code,
+pre,
+kbd,
+samp,
+.el-textarea__inner[readonly],
+.code-block,
+.monospace {
+  font-family: var(--font-family-code) !important;
+  font-size: var(--font-size-sm) !important;
+  font-weight: var(--font-weight-normal) !important;
+  letter-spacing: 0;
+}
+
+/* 字体工具类 */
+.font-pingfang {
+  font-family: var(--font-family-pingfang) !important;
+}
+
+.font-light {
+  font-weight: var(--font-weight-light) !important;
+}
+.font-normal {
+  font-weight: var(--font-weight-normal) !important;
+}
+.font-medium {
+  font-weight: var(--font-weight-medium) !important;
+}
+.font-semibold {
+  font-weight: var(--font-weight-semibold) !important;
+}
+.font-bold {
+  font-weight: var(--font-weight-bold) !important;
+}
+.font-heavy {
+  font-weight: var(--font-weight-heavy) !important;
+}
+
+.font-xs {
+  font-size: var(--font-size-xs) !important;
+}
+.font-sm {
+  font-size: var(--font-size-sm) !important;
+}
+.font-base {
+  font-size: var(--font-size-base) !important;
+}
+.font-md {
+  font-size: var(--font-size-md) !important;
+}
+.font-lg {
+  font-size: var(--font-size-lg) !important;
+}
+.font-xl {
+  font-size: var(--font-size-xl) !important;
+}
+.font-xxl {
+  font-size: var(--font-size-xxl) !important;
+}
+.font-xxxl {
+  font-size: var(--font-size-xxxl) !important;
+}
+
+/* 行高工具类 */
+.line-height-1 {
+  line-height: 1 !important;
+}
+.line-height-1-2 {
+  line-height: 1.2 !important;
+}
+.line-height-1-4 {
+  line-height: 1.4 !important;
+}
+.line-height-1-6 {
+  line-height: 1.6 !important;
+}
+.line-height-1-8 {
+  line-height: 1.8 !important;
+}
+
+/* 字母间距 */
+.letter-spacing-tight {
+  letter-spacing: -0.5px !important;
+}
+.letter-spacing-normal {
+  letter-spacing: normal !important;
+}
+.letter-spacing-wide {
+  letter-spacing: 0.5px !important;
+}
+.letter-spacing-wider {
+  letter-spacing: 1px !important;
+}
+
+/* 响应式字体调整 */
+@media (max-width: 768px) {
+  html {
+    font-size: 15px;
+  }
+
+  h1 {
+    font-size: var(--font-size-xxl) !important;
+  }
+  h2 {
+    font-size: var(--font-size-xl) !important;
+  }
+  h3 {
+    font-size: var(--font-size-lg) !important;
+  }
+  h4 {
+    font-size: var(--font-size-md) !important;
+  }
+  h5 {
+    font-size: var(--font-size-base) !important;
+  }
+  h6 {
+    font-size: var(--font-size-sm) !important;
+  }
+}
+
+@media (max-width: 480px) {
+  html {
+    font-size: 14px;
+  }
+}
