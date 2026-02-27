@@ -1,6 +1,7 @@
-document.addEventListener("DOMContentLoaded", function () {
+/* eslint-disable no-undef */
+document.addEventListener('DOMContentLoaded', function () {
   // 初始化 ECharts 实例
-  var mapChart = echarts.init(document.querySelector(".map .chart"));
+  var mapChart = echarts.init(document.querySelector('.map .chart'))
 
   // 地图坐标数据
   var geoCoordMap = {
@@ -117,48 +118,50 @@ document.addEventListener("DOMContentLoaded", function () {
     长治: [112.8625, 36.4746],
     阳泉: [113.4778, 38.0951],
     青岛: [120.4651, 36.3373],
-    韶关: [113.7964, 24.7028]
-  };
+    韶关: [113.7964, 24.7028],
+  }
 
   // 添加北京的标记点
   var beijingMarker = {
-    name: "北京",
-    type: "effectScatter",
-    coordinateSystem: "geo",
+    name: '北京',
+    type: 'effectScatter',
+    coordinateSystem: 'geo',
     zlevel: 2,
     rippleEffect: {
-      brushType: "stroke"
+      brushType: 'stroke',
     },
     label: {
       normal: {
         show: true,
-        position: "right",
-        formatter: "{b}"
-      }
+        position: 'right',
+        formatter: '{b}',
+      },
     },
     symbolSize: 15, // 北京标记点的大小
     itemStyle: {
       normal: {
-        color: "#000" // 北京标记点的颜色
-      }
+        color: '#000', // 北京标记点的颜色
+      },
     },
-    data: [{
-      name: "北京",
-      value: geoCoordMap["北京"].concat([100]) // 北京的数据点
-    }]
-  };
+    data: [
+      {
+        name: '北京',
+        value: geoCoordMap['北京'].concat([100]), // 北京的数据点
+      },
+    ],
+  }
 
   // 根据饼图数据生成地图区域颜色配置
   function generateMapRegions(pieData) {
     return pieData.map(function (item) {
       // 根据 value 的值设置颜色
-      var areaColor;
+      var areaColor
       if (item.value >= 10000) {
-        areaColor = '#DF807F'; // 红色
+        areaColor = '#DF807F' // 红色
       } else if (item.value >= 5000 && item.value < 10000) {
-        areaColor = '#E9945A'; // 橙色
+        areaColor = '#E9945A' // 橙色
       } else {
-        areaColor = '#ffeb7b'; // 黄色
+        areaColor = '#ffeb7b' // 黄色
       }
 
       return {
@@ -166,67 +169,67 @@ document.addEventListener("DOMContentLoaded", function () {
         label: {
           normal: {
             show: true, // 只对变色区域显示名称
-            color: "#62473D", // 字体颜色
-            fontSize: 12 // 字体大小
-          }
+            color: '#62473D', // 字体颜色
+            fontSize: 12, // 字体大小
+          },
         },
         itemStyle: {
-          areaColor: areaColor // 根据值动态设置颜色
-        }
-      };
-    });
+          areaColor: areaColor, // 根据值动态设置颜色
+        },
+      }
+    })
   }
 
   // 更新地图
   function updateMap(pieData) {
-    var regions = generateMapRegions(pieData);
+    var regions = generateMapRegions(pieData)
     mapChart.setOption({
       geo: {
-        regions: regions // 更新地图区域颜色
-      }
-    });
+        regions: regions, // 更新地图区域颜色
+      },
+    })
   }
 
   // 初始配置
   var option = {
     geo: {
-      map: "china",
+      map: 'china',
       label: {
         normal: {
-          show: false // 默认不显示名称
+          show: false, // 默认不显示名称
         },
         emphasis: {
           show: true,
-          color: "#fff"
-        }
+          color: '#fff',
+        },
       },
       roam: false,
       zoom: 1.22,
       itemStyle: {
         normal: {
-          areaColor: "rgba(43, 196, 243, 0.42)", // 默认颜色
-          borderColor: "rgba(43, 196, 243, 1)",
-          borderWidth: 1
+          areaColor: 'rgba(43, 196, 243, 0.42)', // 默认颜色
+          borderColor: 'rgba(43, 196, 243, 1)',
+          borderWidth: 1,
         },
         emphasis: {
-          areaColor: "#2B91B7"
-        }
-      }
+          areaColor: '#2B91B7',
+        },
+      },
     },
-    series: [beijingMarker] // 添加北京标记点
-  };
+    series: [beijingMarker], // 添加北京标记点
+  }
 
   // 使用配置项显示地图
-  mapChart.setOption(option);
+  mapChart.setOption(option)
 
   // 监听饼图数据更新事件
   document.addEventListener('pieDataUpdated', function (event) {
-    var pieData = event.detail; // 获取饼图数据
-    updateMap(pieData); // 更新地图
-  });
+    var pieData = event.detail // 获取饼图数据
+    updateMap(pieData) // 更新地图
+  })
 
   // 监听窗口大小变化
-  window.addEventListener("resize", function () {
-    mapChart.resize();
-  });
-});
+  window.addEventListener('resize', function () {
+    mapChart.resize()
+  })
+})

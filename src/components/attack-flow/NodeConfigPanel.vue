@@ -3,6 +3,12 @@
     <div class="panel-header">
       <h3>成果节点配置</h3>
       <div class="header-actions">
+        <el-button v-if="!isAudited" type="success" size="small" @click="handleApprove"
+          >审核通过</el-button
+        >
+        <el-button v-if="!isAudited" type="danger" size="small" @click="handleReject"
+          >审核驳回</el-button
+        >
         <el-button type="primary" size="small" @click="handleSave">保存配置</el-button>
         <el-button type="danger" size="small" @click="handleDelete">删除节点</el-button>
       </div>
@@ -75,16 +81,6 @@
                     </el-select>
                   </el-form-item>
                 </el-col>
-                <el-col :span="12">
-                  <el-form-item label="资产ID">
-                    <el-input-number
-                      v-model="formData.assetId"
-                      :min="0"
-                      placeholder="资产ID"
-                      style="width: 100%"
-                    />
-                  </el-form-item>
-                </el-col>
               </el-row>
 
               <el-form-item label="详细说明">
@@ -131,14 +127,6 @@
                   </el-form-item>
                 </el-col>
               </el-row>
-              <el-form-item label="所属成绩ID">
-                <el-input
-                  v-model="formData.resultId"
-                  :min="0"
-                  placeholder="所属成绩ID"
-                  style="width: 100%"
-                />
-              </el-form-item>
               <el-form-item label="评分确认人">
                 <el-input
                   v-model="formData.scoreVerifiedBy"
@@ -167,13 +155,13 @@
               <el-form-item label="文件上传">
                 <el-upload
                   v-model:file-list="fileList"
-                  action="/api/upload"
-                  multiple
-                  :limit="5"
-                  :on-exceed="handleExceed"
+                  :multiple="false"
+                  :limit="1"
                   :before-upload="beforeUpload"
-                  :on-success="handleUploadSuccess"
+                  :on-change="handleFileChange"
                   :on-remove="handleRemove"
+                  :on-preview="handlePreview"
+                  :auto-upload="false"
                   class="file-upload"
                 >
                   <el-button type="primary" class="upload-button">
@@ -183,6 +171,19 @@
                   <template #tip>
                     <div class="upload-tip">支持 PDF 格式，不超过 10MB</div>
                   </template>
+                  <template #file="{ file }">
+                    <div class="file-item">
+                      <span class="file-name">{{ file.name }}</span>
+                      <span class="file-actions">
+                        <el-icon class="preview-icon" @click.stop="handlePreview(file)"
+                          ><View
+                        /></el-icon>
+                        <el-icon class="remove-icon" @click.stop="handleRemove(file)"
+                          ><Delete
+                        /></el-icon>
+                      </span>
+                    </div>
+                  </template>
                 </el-upload>
               </el-form-item>
             </el-form>
@@ -191,12 +192,38 @@
       </el-tabs>
     </div>
   </div>
+
+  <!-- 文件预览对话框 -->
+  <el-dialog
+    v-model="previewDialogVisible"
+    :title="'文件预览 - ' + previewFileName"
+    width="80%"
+    top="10vh"
+  >
+    <div class="preview-container">
+      <iframe
+        v-if="previewFileUrl"
+        :src="previewFileUrl"
+        class="pdf-preview"
+        frameborder="0"
+      ></iframe>
+      <div v-else class="no-file">
+        <el-icon><InfoFilled /></el-icon>
+        <span>没有可预览的文件</span>
+      </div>
+    </div>
+    <template #footer>
+      <span class="dialog-footer">
+        <el-button @click="previewDialogVisible = false">关闭</el-button>
+      </span>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup>
-import { ref, watch, onMounted, nextTick } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Upload } from '@element-plus/icons-vue'
+import { ref, watch, onMounted, nextTick, computed } from 'vue'
+import { ElMessage, ElMessageBox, ElDialog } from 'element-plus'
+import { Upload, View, Delete } from '@element-plus/icons-vue'
 import { attackAchievementApi } from '@/api/services/attack/attackScore'
 
 const props = defineProps({
@@ -208,11 +235,21 @@ const props = defineProps({
 
 const emit = defineEmits(['update', 'delete'])
 
+// 判断是否已审核
+const isAudited = computed(() => {
+  return formData.value.status === 'approved' || formData.value.status === 'rejected'
+})
+
 // 当前激活的标签页
 const activeTab = ref('basic')
 
 // 文件列表
 const fileList = ref([])
+
+// 文件预览
+const previewDialogVisible = ref(false)
+const previewFileUrl = ref('')
+const previewFileName = ref('')
 
 // 表单数据
 const formData = ref({
@@ -320,15 +357,13 @@ const getNodeAttr = (path) => {
 }
 
 // 初始化表单数据
+// 初始化表单数据
 const initFormData = () => {
   if (!props.node) return
 
   try {
-    // 获取节点数据
     const nodeData = getNodeData()
     const currentTime = new Date().toISOString().replace('T', ' ').substring(0, 19)
-
-    // 获取节点标签文本
     const nodeLabel =
       getNodeAttr('label/text') || getNodeAttr('text/text') || nodeData.achievementName || ''
 
@@ -351,9 +386,6 @@ const initFormData = () => {
       attachmentName: nodeData.attachmentName || '',
 
       // 关联信息
-      upstreamNodeId: nodeData.upstreamNodeId || '',
-      attackTeamId: nodeData.attackTeamId || 0,
-      projectId: nodeData.projectId || 0,
       resultId: nodeData.resultId || 0,
 
       // 时间信息
@@ -361,7 +393,7 @@ const initFormData = () => {
       updateTime: nodeData.updateTime || currentTime,
     }
 
-    // 初始化文件列表
+    // 初始化文件列表（关键修改）
     if (nodeData.attachmentName) {
       fileList.value = [
         {
@@ -373,14 +405,87 @@ const initFormData = () => {
       fileList.value = []
     }
 
-    // 保存节点数据到响应式引用
+    // 保存节点数据引用
     nodeDataRef.value = { ...nodeData }
+
+    // 初始化后更新节点样式，确保颜色正确显示对应状态
+    updateNodeStyle()
   } catch (error) {
     console.error('初始化表单数据失败:', error)
   }
 }
+// 审核通过
+const handleApprove = async () => {
+  try {
+    const nodeData = getNodeData()
+    const nodeName = formData.value.achievementName || '未知节点'
 
-// 保存配置
+    await ElMessageBox.confirm(`确定审核通过节点"${nodeName}"吗?`, '审核确认', {
+      type: 'success',
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+    })
+
+    const result = await attackAchievementApi.approve({ id: nodeData.id })
+    if (result) {
+      ElMessage.success('审核通过成功')
+      formData.value.status = 'approved'
+      updateNodeStyle()
+
+      // 更新节点数据
+      if (props.node && typeof props.node.setData === 'function') {
+        const updatedData = { ...nodeData, status: 'approved' }
+        props.node.setData(updatedData)
+      }
+
+      emit('update', { ...formData.value, status: 'approved' })
+    } else {
+      ElMessage.error('审核失败')
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('审核通过失败:', error)
+      ElMessage.error('审核通过失败: ' + (error.message || '未知错误'))
+    }
+  }
+}
+
+// 审核驳回
+const handleReject = async () => {
+  try {
+    const nodeData = getNodeData()
+    const nodeName = formData.value.achievementName || '未知节点'
+
+    await ElMessageBox.confirm(`确定审核驳回节点"${nodeName}"吗?`, '审核确认', {
+      type: 'warning',
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+    })
+
+    const result = await attackAchievementApi.reject({ id: nodeData.id })
+    if (result) {
+      ElMessage.success('审核驳回成功')
+      formData.value.status = 'rejected'
+      updateNodeStyle()
+
+      // 更新节点数据
+      if (props.node && typeof props.node.setData === 'function') {
+        const updatedData = { ...nodeData, status: 'rejected' }
+        props.node.setData(updatedData)
+      }
+
+      emit('update', { ...formData.value, status: 'rejected' })
+    } else {
+      ElMessage.error('审核失败')
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('审核驳回失败:', error)
+      ElMessage.error('审核驳回失败: ' + (error.message || '未知错误'))
+    }
+  }
+}
+
 const handleSave = async () => {
   if (!props.node) return
 
@@ -391,59 +496,98 @@ const handleSave = async () => {
       return
     }
 
-    // 获取节点数据
     const nodeData = getNodeData()
-    const nodeId = nodeData.id
-
-    // 准备保存数据
     const saveData = {
-      ...formData.value,
-      // 更新时间
+      achievementName: formData.value.achievementName.trim(),
+      assetName: formData.value.assetName || '',
+      assetIP: formData.value.assetIP || '',
+      assetId: Number(formData.value.assetId) || 0,
+      networkLevel: formData.value.networkLevel || '',
+      status: formData.value.status || 'draft',
+      description: formData.value.description || '',
+      predictedScore: Number(formData.value.predictedScore) || 0,
+      actualScore: Number(formData.value.actualScore) || 0,
+      scoreVerifiedBy: formData.value.scoreVerifiedBy || '',
+      resultId: Number(formData.value.resultId) || 0, // 确保关联成绩ID
+      projectId: Number(formData.value.projectId) || 0,
+      attackTeamId: Number(formData.value.attackTeamId) || 0,
       updateTime: new Date().toISOString().replace('T', ' ').substring(0, 19),
     }
 
+    // 提取文件
+    const files = []
+    if (fileList.value && fileList.value.length > 0) {
+      fileList.value.forEach((fileObj) => {
+        if (fileObj.raw && fileObj.raw instanceof File) {
+          files.push(fileObj.raw)
+        }
+      })
+    }
+
     let result
-    if (nodeId) {
-      // 更新现有成果配置
-      saveData.id = nodeId
-      result = await attackAchievementApi.modify(saveData)
 
-      // 安全地处理响应
-      if (result && result.data) {
-        ElMessage.success('节点配置更新成功')
-      } else {
-        ElMessage.success('节点配置更新成功')
-      }
+    if (nodeData.id) {
+      // 更新成果
+      saveData.id = nodeData.id
+      result = await attackAchievementApi.modify(saveData, files)
     } else {
-      // 创建新成果配置
-      result = await attackAchievementApi.add(saveData)
+      // 创建成果
+      result = await attackAchievementApi.add(saveData, files)
 
-      // 安全地更新节点ID
+      // 如果创建成功，更新节点ID
       if (result && result.data && result.data.id) {
-        const updatedNodeData = {
-          ...nodeData,
-          id: result.data.id,
-        }
-        // 使用安全的设置方法
-        if (typeof props.node.setData === 'function') {
-          props.node.setData(updatedNodeData)
-        } else if (typeof props.node.prop === 'function') {
-          props.node.prop('data', updatedNodeData)
-        }
-        ElMessage.success('节点配置创建成功')
-      } else {
-        // 即使没有返回ID，也视为成功
-        ElMessage.success('节点配置保存成功')
+        // 触发父组件更新节点ID
+        emit('node-id-update', {
+          node: props.node,
+          newId: result.data.id,
+        })
       }
     }
 
-    // 更新节点显示
-    updateNodeDisplay()
+    if (result) {
+      ElMessage.success(nodeData.id ? '成果更新成功' : '成果创建成功')
 
-    emit('update', formData.value)
+      // 提取接口返回的文件信息
+      const returnedData = result.data || {}
+      const attachmentInfo = {
+        attachmentName: returnedData.attachmentName || formData.value.attachmentName || '',
+        attachmentUrl: returnedData.attachmentUrl || '',
+      }
+
+      // 更新节点数据
+      const updatedData = {
+        ...saveData,
+        ...attachmentInfo,
+        id: returnedData.id || nodeData.id,
+      }
+
+      // 直接更新节点的data
+      if (props.node && typeof props.node.setData === 'function') {
+        props.node.setData(updatedData)
+        console.log('✅ 节点数据已直接更新:', updatedData)
+      }
+
+      // 更新节点显示
+      updateNodeDisplay()
+
+      // 更新文件列表
+      if (attachmentInfo.attachmentName) {
+        fileList.value = [
+          {
+            name: attachmentInfo.attachmentName,
+            url: attachmentInfo.attachmentUrl || '',
+          },
+        ]
+      }
+
+      // 通知父组件
+      emit('update', updatedData)
+    } else {
+      ElMessage.error('保存失败')
+    }
   } catch (error) {
     console.error('保存失败:', error)
-    ElMessage.error('保存失败: ' + (error.message || '未知错误'))
+    ElMessage.error(`保存失败: ${error.message || '未知错误'}`)
   }
 }
 
@@ -527,17 +671,9 @@ const updateNodeStyle = () => {
       break
   }
 
-  // 设置节点样式 - 使用 X6 方法
+  // 设置节点样式
   if (typeof props.node.attr === 'function') {
     props.node.attr({
-      body: {
-        fill: color,
-        stroke: color,
-        strokeWidth: 2,
-      },
-    })
-  } else if (typeof props.node.setAttrs === 'function') {
-    props.node.setAttrs({
       body: {
         fill: color,
         stroke: color,
@@ -548,6 +684,7 @@ const updateNodeStyle = () => {
 }
 
 // 文件上传处理
+// 文件上传前的验证
 const beforeUpload = (file) => {
   const isPDF = file.type === 'application/pdf'
   const isLt10M = file.size / 1024 / 1024 < 10
@@ -563,18 +700,54 @@ const beforeUpload = (file) => {
   return true
 }
 
-const handleUploadSuccess = (response, file) => {
-  formData.value.attachmentName = file.name
-  ElMessage.success('文件上传成功')
+// 文件预览
+const handlePreview = async (file) => {
+  try {
+    console.log('预览文件:', file)
+
+    if (file.url) {
+      // 如果有URL，直接预览
+      previewFileUrl.value = file.url
+      previewFileName.value = file.name
+      previewDialogVisible.value = true
+    } else if (file.raw) {
+      // 如果是本地文件，创建临时URL
+      const tempUrl = URL.createObjectURL(file.raw)
+      previewFileUrl.value = tempUrl
+      previewFileName.value = file.name
+      previewDialogVisible.value = true
+    } else if (props.node) {
+      // 如果是已保存的文件，尝试从节点数据中获取
+      const nodeData = getNodeData()
+      if (nodeData.attachmentUrl) {
+        previewFileUrl.value = nodeData.attachmentUrl
+        previewFileName.value = nodeData.attachmentName || file.name
+        previewDialogVisible.value = true
+      } else {
+        ElMessage.warning('文件预览失败：没有可用的文件URL')
+      }
+    } else {
+      ElMessage.warning('文件预览失败：文件信息不完整')
+    }
+  } catch (error) {
+    console.error('预览文件失败:', error)
+    ElMessage.error('文件预览失败: ' + (error.message || '未知错误'))
+  }
 }
 
+// 文件移除处理
 const handleRemove = () => {
   formData.value.attachmentName = ''
+  fileList.value = []
   ElMessage.info('文件已移除')
 }
 
-const handleExceed = () => {
-  ElMessage.warning('最多只能上传 5 个文件')
+const handleFileChange = (file) => {
+  console.log('文件选择变化:', file)
+  // 自动填充附件名称
+  if (!formData.value.attachmentName && file.name) {
+    formData.value.attachmentName = file.name
+  }
 }
 
 // 监听节点变化
@@ -810,5 +983,98 @@ onMounted(() => {
   :deep(.el-col) {
     margin-bottom: 8px;
   }
+}
+.header-actions {
+  display: flex;
+  gap: 8px;
+
+  .el-button {
+    &.el-button--success {
+      background-color: #67c23a;
+      border-color: #67c23a;
+    }
+
+    &.el-button--danger {
+      background-color: #f56c6c;
+      border-color: #f56c6c;
+    }
+  }
+}
+
+/* 文件上传样式 */
+.file-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  margin-top: 8px;
+  transition: all 0.3s;
+
+  &:hover {
+    background: #ecf5ff;
+  }
+}
+
+.file-name {
+  font-size: 14px;
+  color: #606266;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.preview-icon,
+.remove-icon {
+  cursor: pointer;
+  font-size: 16px;
+  transition: color 0.3s;
+
+  &:hover {
+    color: #409eff;
+  }
+}
+
+.remove-icon:hover {
+  color: #f56c6c;
+}
+
+/* 文件预览样式 */
+.preview-container {
+  width: 100%;
+  height: 70vh;
+  position: relative;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.pdf-preview {
+  width: 100%;
+  height: 100%;
+}
+
+.no-file {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #909399;
+  font-size: 16px;
+  gap: 8px;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 </style>

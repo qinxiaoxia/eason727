@@ -175,22 +175,6 @@
           </template>
         </el-table-column>
 
-        <!-- 成果ID -->
-        <el-table-column prop="achievementId" label="成果ID" width="120" align="center">
-          <template #default="{ row }">
-            <span v-if="row.achievementId">{{ row.achievementId }}</span>
-            <span v-else class="text-muted">-</span>
-          </template>
-        </el-table-column>
-
-        <!-- 结果ID -->
-        <el-table-column prop="resultId" label="结果ID" width="120" align="center">
-          <template #default="{ row }">
-            <span v-if="row.resultId">{{ row.resultId }}</span>
-            <span v-else class="text-muted">-</span>
-          </template>
-        </el-table-column>
-
         <!-- 操作列 -->
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
@@ -268,6 +252,7 @@
                     placeholder="请选择项目"
                     filterable
                     clearable
+                    @change="handleProjectChange"
                   >
                     <el-option
                       v-for="project in projectList"
@@ -349,6 +334,46 @@
 
             <el-row :gutter="20">
               <el-col :span="12">
+                <el-form-item label="关联成绩">
+                  <el-select
+                    v-model="formData.resultId"
+                    placeholder="请选择成绩"
+                    filterable
+                    clearable
+                    :disabled="!formData.projectId"
+                    @change="handleResultChange"
+                  >
+                    <el-option
+                      v-for="result in resultList"
+                      :key="result.id"
+                      :label="`成绩-${result.id} (${result.attackTeamName || '未知'})`"
+                      :value="result.id"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="关联成果">
+                  <el-select
+                    v-model="formData.achievementId"
+                    placeholder="请选择成果"
+                    filterable
+                    clearable
+                    :disabled="!formData.resultId"
+                  >
+                    <el-option
+                      v-for="achievement in achievementList"
+                      :key="achievement.id"
+                      :label="achievement.achievementName || achievement.id"
+                      :value="achievement.id"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+            </el-row>
+
+            <el-row :gutter="20">
+              <el-col :span="12">
                 <el-form-item label="最终得分">
                   <el-input
                     v-model.number="formData.finalScore"
@@ -358,26 +383,7 @@
                   />
                 </el-form-item>
               </el-col>
-              <el-col :span="12">
-                <el-form-item label="成果ID">
-                  <el-input
-                    v-model.number="formData.achievementId"
-                    placeholder="请输入成果ID"
-                    type="number"
-                    clearable
-                  />
-                </el-form-item>
-              </el-col>
             </el-row>
-
-            <el-form-item label="结果ID">
-              <el-input
-                v-model.number="formData.resultId"
-                placeholder="请输入结果ID"
-                type="number"
-                clearable
-              />
-            </el-form-item>
           </el-form>
         </el-card>
       </div>
@@ -434,12 +440,6 @@
                 {{ formatScore(currentDetail.finalScore) }}
               </span>
             </el-descriptions-item>
-            <el-descriptions-item label="成果ID">{{
-              currentDetail.achievementId || '-'
-            }}</el-descriptions-item>
-            <el-descriptions-item label="结果ID">{{
-              currentDetail.resultId || '-'
-            }}</el-descriptions-item>
           </el-descriptions>
         </el-card>
       </div>
@@ -451,10 +451,11 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete, Refresh, Filter, View, Edit } from '@element-plus/icons-vue'
-import { scoringItemApi } from '@/api/services/panaltyScore/scoringItem'
+import { scoringItemApi } from '@/api/services/panaltyscore/scoringItem'
 import { projectApi } from '@/api/services/project/project'
-import { scoringRuleApi } from '@/api/services/panaltyScore/scoringRule'
+import { scoringRuleApi } from '@/api/services/panaltyscore/scoringRule'
 import teamApi from '@/api/services/team/team'
+import { attackScoreApi } from '@/api/services/attack/attackScore'
 
 // 状态
 const loading = ref(false)
@@ -470,6 +471,8 @@ const formRef = ref()
 const projectList = ref([])
 const ruleList = ref([])
 const teamList = ref([])
+const resultList = ref([])
+const achievementList = ref([])
 
 // 分页
 const pagination = reactive({
@@ -498,10 +501,10 @@ const formData = reactive({
   ruleId: '',
   attackTeamId: '',
   defenseTeamId: '',
+  resultId: '',
+  achievementId: '',
   actualScore: null,
   finalScore: null,
-  achievementId: null,
-  resultId: null,
 })
 
 // 表单验证规则
@@ -675,8 +678,6 @@ const handleAddItem = () => {
   })
   formData.actualScore = null
   formData.finalScore = null
-  formData.achievementId = null
-  formData.resultId = null
   drawerVisible.value = true
 }
 
@@ -774,6 +775,8 @@ const handleSave = async () => {
       ruleId: Number(formData.ruleId),
       attackTeamId: formData.attackTeamId ? Number(formData.attackTeamId) : null,
       defenseTeamId: formData.defenseTeamId ? Number(formData.defenseTeamId) : null,
+      resultId: formData.resultId ? Number(formData.resultId) : null,
+      achievementId: formData.achievementId ? Number(formData.achievementId) : null,
       actualScore:
         formData.actualScore !== null && formData.actualScore !== ''
           ? Number(formData.actualScore)
@@ -782,12 +785,6 @@ const handleSave = async () => {
         formData.finalScore !== null && formData.finalScore !== ''
           ? Number(formData.finalScore)
           : null,
-      achievementId:
-        formData.achievementId !== null && formData.achievementId !== ''
-          ? Number(formData.achievementId)
-          : null,
-      resultId:
-        formData.resultId !== null && formData.resultId !== '' ? Number(formData.resultId) : null,
     }
 
     // 如果是编辑模式，添加ID
@@ -825,6 +822,66 @@ onMounted(() => {
   fetchTeamList()
   fetchData()
 })
+
+// 获取成绩列表
+const fetchResultList = async (projectId) => {
+  if (!projectId) {
+    resultList.value = []
+    achievementList.value = []
+    return
+  }
+  try {
+    const result = await attackScoreApi.getPageList({
+      page: 1,
+      limit: 100,
+      data: { projectId: Number(projectId) },
+    })
+    if (result && result.code === 200) {
+      resultList.value = result.data?.list || []
+    }
+  } catch (error) {
+    console.error('获取成绩列表失败:', error)
+  }
+}
+
+// 获取成果列表
+const fetchAchievementList = async (resultId) => {
+  if (!resultId) {
+    achievementList.value = []
+    return
+  }
+  const result = resultList.value.find((r) => r.id === Number(resultId))
+  if (result && result.resultGraph) {
+    try {
+      const parsed = JSON.parse(result.resultGraph)
+      achievementList.value = parsed.achievements || []
+    } catch {
+      achievementList.value = []
+    }
+  } else {
+    achievementList.value = []
+  }
+}
+
+// 项目选择变化
+const handleProjectChange = (projectId) => {
+  formData.resultId = ''
+  formData.achievementId = ''
+  resultList.value = []
+  achievementList.value = []
+  if (projectId) {
+    fetchResultList(projectId)
+  }
+}
+
+// 成绩选择变化
+const handleResultChange = (resultId) => {
+  formData.achievementId = ''
+  achievementList.value = []
+  if (resultId) {
+    fetchAchievementList(resultId)
+  }
+}
 </script>
 
 <style scoped lang="scss">

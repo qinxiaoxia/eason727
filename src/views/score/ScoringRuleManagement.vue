@@ -502,7 +502,7 @@ import {
   Upload,
   Download,
 } from '@element-plus/icons-vue'
-import { scoringRuleApi } from '@/api/services/panaltyScore/scoringRule'
+import { scoringRuleApi } from '@/api/services/panaltyscore/scoringRule'
 
 // 状态
 const loading = ref(false)

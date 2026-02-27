@@ -4,7 +4,7 @@
       <div class="top-navbar">
         <div class="nav-content">
           <div class="logo-container">
-            <img src="@/assets/images/资产前哨logo.png" alt="中国体育彩票" class="logo-image" />
+            <img src="@/assets/images/攻防演练平台logo.png" alt="中国体育彩票" class="logo-image" />
           </div>
 
           <el-menu
@@ -143,17 +143,37 @@ const visibleTopMenuItems = computed(() => {
 // 获取当前激活的一级菜单
 const activeTopMenu = computed(() => {
   const path = route.path
-  if (path.startsWith('/overview')) return 'overview'
-  if (path.startsWith('/attack')) return 'attack'
-  if (path.startsWith('/attackRequest')) return 'attackRequest'
-  if (path.startsWith('/asset')) return 'asset'
-  if (path.startsWith('/score')) return 'score'
-  if (path.startsWith('/project')) return 'project'
-  if (path.startsWith('/teamManagement')) return 'teamManagement'
-  if (path.startsWith('/proxy')) return 'proxy'
-  if (path.startsWith('/report')) return 'report'
-  if (path.startsWith('/system')) return 'system'
-  return 'overview'
+
+  // 使用对象映射替代多个 if 判断，提高可读性和准确性
+  const menuMap = {
+    '/overview': 'overview',
+    '/attack': 'attack',
+    '/attack/AttackScore': 'attack',
+    '/attack/AppealManagement': 'attack',
+    '/attack/AttackRequest': 'attackRequest',
+    '/asset/AssetManagement': 'asset',
+    '/team/TeamManagement': 'teamManagement',
+    '/project': 'project',
+    '/project/ProjectManagement': 'project',
+    '/project/ProjectMaterialManagement': 'project',
+    '/score': 'score',
+    '/score/panaltyScore': 'score',
+    '/score/ScoringRuleManagement': 'score',
+    '/score/ScoringItemManagement': 'score',
+    '/proxy': 'proxy',
+    '/proxy/ProxyManagement': 'proxy',
+    '/proxy/ProxyUser': 'proxy',
+    '/report': 'report',
+    '/system': 'system',
+    '/system/UserManagement': 'system',
+    '/system/RoleManagement': 'system',
+    '/system/MenuManagement': 'system',
+    '/system/AssignColumnsManagement': 'system',
+    '/system/PersonalCenter': 'system',
+  }
+
+  // 默认返回 overview
+  return menuMap[path] || 'overview'
 })
 
 // 获取有权限的二级导航项
@@ -250,7 +270,11 @@ const maintainMenuStyles = () => {
 onMounted(() => {
   console.log('🏠 Layout 加载完成')
   console.log('👤 当前用户权限:', getUserPermits())
-  maintainMenuStyles()
+
+  // 强制更新菜单状态
+  nextTick(() => {
+    maintainMenuStyles()
+  })
 })
 
 // 添加路由监听

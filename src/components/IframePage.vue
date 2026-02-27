@@ -36,7 +36,18 @@ export default {
       }
 
       // 构建完整路径
-      const fullPath = `${base}/${src}`
+      let fullPath = `${base}/${src}`
+      
+      // 获取token并添加到URL
+      try {
+        const token = localStorage.getItem('Authorization')
+        if (token) {
+          const separator = src.includes('?') ? '&' : '?'
+          fullPath = `${fullPath}${separator}token=${encodeURIComponent(token)}`
+        }
+      } catch (e) {
+        console.warn('获取token失败:', e)
+      }
 
       // 开发环境使用绝对路径，生产环境使用相对路径
       if (import.meta.env.DEV) {

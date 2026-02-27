@@ -132,7 +132,7 @@
           </template>
         </el-table-column>
         <!-- 操作列 -->
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <div class="icon-actions">
               <!-- 查看详情 -->
@@ -142,10 +142,24 @@
                 </el-icon>
               </el-tooltip>
 
-              <!-- 编辑 -->
-              <el-tooltip content="编辑" placement="top">
+              <!-- 创建/编辑成果 -->
+              <el-tooltip :content="hasAchievements(row) ? '编辑成果' : '创建成果'" placement="top">
+                <el-icon
+                  class="action-icon"
+                  :class="hasAchievements(row) ? 'edit-icon' : 'add-icon'"
+                  @click="
+                    hasAchievements(row) ? handleEditAchievement(row) : handleCreateAchievement(row)
+                  "
+                >
+                  <Collection v-if="hasAchievements(row)" />
+                  <Plus v-else />
+                </el-icon>
+              </el-tooltip>
+
+              <!-- 编辑成绩 -->
+              <el-tooltip content="编辑成绩" placement="top">
                 <el-icon class="action-icon edit-icon" @click="handleEditScore(row)">
-                  <Edit />
+                  <Document />
                 </el-icon>
               </el-tooltip>
 
@@ -178,10 +192,11 @@
     <el-dialog
       v-model="scoreDialogVisible"
       :title="scoreDialogTitle"
-      width="90%"
-      top="5vh"
+      width="95%"
+      top="3vh"
       class="score-dialog"
       :close-on-click-modal="false"
+      :before-close="handleDialogClose"
     >
       <div class="dialog-content">
         <!-- 基础信息表单 -->
@@ -283,6 +298,84 @@
       </template>
     </el-dialog>
 
+    <!-- 基本信息弹窗（新建/编辑成绩） -->
+    <el-dialog
+      v-model="basicDialogVisible"
+      :title="scoreForm.id ? '编辑成绩' : '新建成绩'"
+      width="500px"
+      :close-on-click-modal="false"
+    >
+      <el-form :model="scoreForm" label-width="100px">
+        <el-form-item label="防守单位" required>
+          <el-select
+            v-model="scoreForm.defenseTeamId"
+            placeholder="请选择防守单位"
+            filterable
+            clearable
+            @change="handleDefenseTeamChange"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="team in defenseTeams"
+              :key="team.id"
+              :label="team.teamName"
+              :value="team.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="项目" required>
+          <el-select
+            v-model="scoreForm.projectId"
+            placeholder="请选择项目"
+            filterable
+            clearable
+            @change="handleProjectChange"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="project in projects"
+              :key="project.id"
+              :label="project.projectName"
+              :value="project.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="攻击描述">
+          <el-input
+            v-model="scoreForm.description"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入攻击描述"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="basicDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleSaveBasic">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 成果流程图弹窗 -->
+    <el-dialog
+      v-model="achievementDialogVisible"
+      :title="achievementMode === 'create' ? '创建成果' : '编辑成果'"
+      width="95%"
+      top="3vh"
+      :close-on-click-modal="false"
+    >
+      <AttackAchievementFlow
+        ref="flowRef"
+        :result-id="scoreForm.id || 0"
+        :project-id="Number(scoreForm.projectId) || 0"
+        :attack-team-id="Number(scoreForm.attackTeamId) || 0"
+        :defense-team-id="Number(scoreForm.defenseTeamId) || 0"
+      />
+      <template #footer>
+        <el-button @click="achievementDialogVisible = false">关闭</el-button>
+        <el-button type="primary" @click="handleSaveAchievement">保存成果</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 成绩详情抽屉 -->
     <el-drawer
       v-model="detailDrawerVisible"
@@ -345,7 +438,7 @@
             <el-table-column prop="actualScore" label="得分" width="80" align="center" />
             <el-table-column label="操作" width="100" align="center">
               <template #default="{ row }">
-                <el-button type="primary" link @click="handleEditAchievement(row)">
+                <el-button type="primary" link @click="handleEditAchievementFromDetail(row)">
                   编辑成果
                 </el-button>
               </template>
@@ -359,16 +452,20 @@
 
 <script setup>
 import { ref, reactive, onMounted, computed, nextTick } from 'vue'
-import { Plus, Delete, Refresh, View, Edit } from '@element-plus/icons-vue'
+import { Plus, Delete, Refresh, View, Document, Collection } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import AttackAchievementFlow from '@/components/attack-flow/AttackAchievementFlow.vue'
 import { attackScoreApi } from '@/api/services/attack/attackScore'
 import teamApi from '@/api/services/team/team'
 import { projectApi } from '@/api/services/project/project.js'
+
 // 状态
 const loading = ref(false)
 const detailDrawerVisible = ref(false)
 const scoreDialogVisible = ref(false)
+const basicDialogVisible = ref(false)
+const achievementDialogVisible = ref(false)
+const achievementMode = ref('create')
 const currentDetail = ref(null)
 const selectedRows = ref([])
 const attackTeams = ref([])
@@ -383,49 +480,7 @@ const pagination = reactive({
   pageSize: 10,
   total: 0,
 })
-const loadTeamsAndProjects = async () => {
-  try {
-    // 加载攻击队伍 (teamType 可以根据实际情况调整)
-    const attackTeamParams = {
-      page: 1,
-      limit: 1000,
-      data: {
-        teamType: 'attack', // 或者根据实际情况调整
-      },
-    }
-    const attackResult = await teamApi.getPageList(attackTeamParams)
-    attackTeams.value = attackResult.data || []
 
-    // 加载防守队伍
-    const defenseTeamParams = {
-      page: 1,
-      limit: 1000,
-      data: {
-        teamType: 'defense', // 或者根据实际情况调整
-      },
-    }
-    const defenseResult = await teamApi.getPageList(defenseTeamParams)
-    defenseTeams.value = defenseResult.data || []
-
-    // 加载项目
-    const projectParams = {
-      page: 1,
-      limit: 1000,
-      data: {},
-    }
-    const projectResult = await projectApi.getPageList(projectParams)
-    projects.value = projectResult.data || []
-
-    console.log('加载数据成功:', {
-      attackTeams: attackTeams.value.length,
-      defenseTeams: defenseTeams.value.length,
-      projects: projects.value.length,
-    })
-  } catch (error) {
-    console.error('加载队伍和项目数据失败:', error)
-    ElMessage.error('加载基础数据失败')
-  }
-}
 // 成绩表单
 const scoreForm = ref({
   attackTeamId: '',
@@ -479,6 +534,27 @@ const getAchievementCount = (resultGraph) => {
     return 0
   }
 }
+
+const getStatusTagType = (status) => {
+  const statusMap = {
+    pending: 'warning',
+    approved: 'success',
+    rejected: 'danger',
+    draft: 'info',
+  }
+  return statusMap[status] || 'info'
+}
+
+const getStatusText = (status) => {
+  const statusMap = {
+    pending: '待审核',
+    approved: '已批准',
+    rejected: '已拒绝',
+    draft: '草稿',
+  }
+  return statusMap[status] || status
+}
+
 // 定义所有在模板中使用的函数
 const handleSearch = () => {
   clearTimeout(searchTimer.value)
@@ -518,22 +594,184 @@ const handleCurrentChange = (page) => {
   fetchData()
 }
 
+const hasAchievements = (row) => {
+  if (!row.resultGraph || row.resultGraph === '{}') {
+    return false
+  }
+  try {
+    const data = JSON.parse(row.resultGraph)
+    return data.achievements && data.achievements.length > 0
+  } catch {
+    return false
+  }
+}
+
+const handleSaveBasic = async () => {
+  if (!scoreForm.value.defenseTeamId) {
+    ElMessage.warning('请选择防守单位')
+    return
+  }
+  if (!scoreForm.value.projectId) {
+    ElMessage.warning('请选择项目')
+    return
+  }
+
+  try {
+    const saveData = {
+      attackTeamId: Number(scoreForm.value.attackTeamId) || 0,
+      attackTeamName: scoreForm.value.attackTeamName || '',
+      defenseTeamId: Number(scoreForm.value.defenseTeamId),
+      defenseTeamName: scoreForm.value.defenseTeamName || '',
+      projectId: Number(scoreForm.value.projectId),
+      projectName: scoreForm.value.projectName || '',
+      description: scoreForm.value.description || '',
+    }
+
+    if (scoreForm.value.id) {
+      saveData.id = scoreForm.value.id
+      await attackScoreApi.modify(saveData)
+      ElMessage.success('成绩更新成功')
+    } else {
+      const result = await attackScoreApi.add(saveData)
+      if (result.data && result.data.id) {
+        scoreForm.value.id = result.data.id
+      }
+      ElMessage.success('成绩创建成功')
+    }
+
+    fetchData()
+    basicDialogVisible.value = false
+  } catch (error) {
+    console.error('保存成绩失败:', error)
+    ElMessage.error('保存失败')
+  }
+}
+
+const handleCreateAchievement = async (row) => {
+  const projectName =
+    row.projectName ||
+    projects.value.find((project) => project.id === row.projectId)?.projectName ||
+    ''
+
+  scoreForm.value = {
+    id: row.id,
+    attackTeamId: row.attackTeamId || '',
+    attackTeamName: row.attackTeamName || '',
+    defenseTeamId: row.defenseTeamId,
+    defenseTeamName: row.defenseTeamName || '',
+    projectId: row.projectId,
+    projectName: projectName,
+    description: row.description || '',
+  }
+
+  achievementMode.value = 'create'
+  achievementDialogVisible.value = true
+  await nextTick()
+  if (flowRef.value) {
+    flowRef.value.resetGraph()
+  }
+}
+
+const handleEditAchievement = async (row) => {
+  const projectName =
+    row.projectName ||
+    projects.value.find((project) => project.id === row.projectId)?.projectName ||
+    ''
+
+  const defenseTeamName =
+    row.defenseTeamName ||
+    defenseTeams.value.find((team) => team.id === row.defenseTeamId)?.teamName ||
+    ''
+
+  const attackTeamName =
+    row.attackTeamName ||
+    attackTeams.value.find((team) => team.id === row.attackTeamId)?.teamName ||
+    ''
+
+  scoreForm.value = {
+    id: row.id,
+    attackTeamId: row.attackTeamId || '',
+    attackTeamName: attackTeamName,
+    defenseTeamId: row.defenseTeamId,
+    defenseTeamName: defenseTeamName,
+    projectId: row.projectId,
+    projectName: projectName,
+    description: row.description || '',
+  }
+  achievementMode.value = 'edit'
+  achievementDialogVisible.value = true
+  await nextTick()
+  if (flowRef.value && row.resultGraph) {
+    try {
+      const data = JSON.parse(row.resultGraph)
+      if (data.achievements) {
+        const x6Data = convertToX6Format(data)
+        if (x6Data) {
+          flowRef.value.loadGraphData(x6Data)
+        }
+      } else if (data.cells) {
+        flowRef.value.loadGraphData(data)
+      }
+    } catch (e) {
+      console.error('加载流程图失败:', e)
+    }
+  }
+}
+
+const handleSaveAchievement = async () => {
+  if (!scoreForm.value.id) {
+    ElMessage.warning('请先保存成绩')
+    return
+  }
+
+  try {
+    let resultGraph = '{}'
+    if (flowRef.value) {
+      const flowData = flowRef.value.getGraphData()
+      const simplifiedData = simplifyGraphData(flowData, scoreForm.value.id)
+      resultGraph = JSON.stringify(simplifiedData)
+    }
+
+    const saveData = {
+      id: scoreForm.value.id,
+      attackTeamId: Number(scoreForm.value.attackTeamId) || 0,
+      attackTeamName: scoreForm.value.attackTeamName || '',
+      defenseTeamId: Number(scoreForm.value.defenseTeamId),
+      defenseTeamName: scoreForm.value.defenseTeamName || '',
+      projectId: Number(scoreForm.value.projectId),
+      projectName: scoreForm.value.projectName || '',
+      description: scoreForm.value.description || '',
+      resultGraph: resultGraph,
+    }
+
+    await attackScoreApi.modify(saveData)
+    ElMessage.success('成果保存成功')
+    achievementDialogVisible.value = false
+    fetchData()
+  } catch (error) {
+    console.error('保存成果失败:', error)
+    ElMessage.error('保存失败')
+  }
+}
+
+const handleEditAchievementFromDetail = async () => {
+  const row = tableData.value.find((item) => item.id === currentDetail.value.id)
+  if (row) {
+    detailDrawerVisible.value = false
+    await nextTick()
+    handleEditAchievement(row)
+  }
+}
+
 const handleAddScore = () => {
   scoreForm.value = {
+    id: '',
     attackTeamId: '',
     defenseTeamId: '',
     projectId: '',
     description: '',
-    resultGraph: '',
   }
-  scoreDialogVisible.value = true
-
-  // 等待弹窗完全渲染后再清空画布
-  nextTick(() => {
-    if (flowRef.value) {
-      flowRef.value.clearGraph()
-    }
-  })
+  basicDialogVisible.value = true
 }
 
 const handleBatchDelete = async () => {
@@ -562,78 +800,53 @@ const handleBatchDelete = async () => {
 }
 
 const handleViewDetail = async (row) => {
-  try {
-    const result = await attackScoreApi.getInfo({ id: row.id })
-    currentDetail.value = result.data
-    detailDrawerVisible.value = true
-  } catch (error) {
-    console.error('获取详情失败:', error)
-    ElMessage.error('获取详情失败')
+  const detailData = {
+    id: row.id,
+    projectId: row.projectId,
+    attackTeamId: row.attackTeamId,
+    defenseTeamId: row.defenseTeamId,
+    description: row.description || '',
+    createTime: row.createTime,
+    updateTime: row.updateTime,
+    resultGraph: row.resultGraph,
   }
+
+  if (detailData.resultGraph && detailData.resultGraph !== '{}') {
+    try {
+      const parsed = JSON.parse(detailData.resultGraph)
+      if (parsed.achievements) {
+        detailData.achievements = parsed.achievements
+      }
+    } catch (e) {
+      console.error('解析resultGraph失败:', e)
+    }
+  }
+
+  currentDetail.value = detailData
+  detailDrawerVisible.value = true
 }
 
 const handleEditScore = async (row) => {
-  try {
-    console.log('编辑行数据:', row)
+  const defenseTeamName =
+    row.defenseTeamName ||
+    defenseTeams.value.find((team) => team.id === row.defenseTeamId)?.teamName ||
+    ''
+  const projectName =
+    row.projectName ||
+    projects.value.find((project) => project.id === row.projectId)?.projectName ||
+    ''
 
-    // 确保名称字段有值
-    const attackTeamName =
-      row.attackTeamName ||
-      attackTeams.value.find((team) => team.id === row.attackTeamId)?.teamName ||
-      ''
-    const defenseTeamName =
-      row.defenseTeamName ||
-      defenseTeams.value.find((team) => team.id === row.defenseTeamId)?.teamName ||
-      ''
-    const projectName =
-      row.projectName ||
-      projects.value.find((project) => project.id === row.projectId)?.projectName ||
-      ''
-
-    scoreForm.value = {
-      id: row.id,
-      attackTeamId: row.attackTeamId,
-      attackTeamName: attackTeamName, // 确保攻击单位名称被填充
-      defenseTeamId: row.defenseTeamId,
-      defenseTeamName: defenseTeamName,
-      projectId: row.projectId,
-      projectName: projectName,
-      description: row.description || '',
-      resultGraph: row.resultGraph || '{}',
-    }
-
-    console.log('表单数据:', scoreForm.value)
-
-    // 打开弹窗
-    scoreDialogVisible.value = true
-
-    // 等待弹窗完全渲染后再加载流程图数据
-    await nextTick()
-
-    // 如果有流程图数据，尝试加载
-    if (row.resultGraph && flowRef.value) {
-      try {
-        const graphData = JSON.parse(row.resultGraph)
-        console.log('解析的流程图数据:', graphData)
-
-        // 从后端格式转换为 X6 格式
-        const x6Data = convertToX6Format(graphData)
-        if (x6Data) {
-          flowRef.value.loadGraphData(x6Data)
-        } else {
-          flowRef.value.clearGraph()
-        }
-      } catch (e) {
-        console.error('解析流程图数据失败:', e)
-        flowRef.value.clearGraph()
-      }
-    } else if (flowRef.value) {
-      flowRef.value.clearGraph()
-    }
-  } catch (error) {
-    console.error('编辑失败:', error)
-    ElMessage.error('编辑失败')
+  scoreForm.value = {
+    id: row.id,
+    attackTeamId: row.attackTeamId || '',
+    defenseTeamId: row.defenseTeamId,
+    defenseTeamName: defenseTeamName,
+    projectId: row.projectId,
+    projectName: projectName,
+    description: row.description || '',
   }
+
+  basicDialogVisible.value = true
 }
 
 // 后端格式转 X6 格式
@@ -647,12 +860,12 @@ const convertToX6Format = (backendData) => {
   // 添加起点节点
   const startNode = {
     id: 'start',
-    shape: 'rect',
+    shape: 'circle',
     position: { x: 100, y: 200 },
-    size: { width: 120, height: 40 },
+    size: { width: 60, height: 60 },
     attrs: {
-      label: { text: '渗透路径起点' },
-      body: { fill: '#409eff', stroke: '#409eff' },
+      label: { text: '起点', fill: '#fff' },
+      body: { fill: '#409eff', stroke: '#409eff', strokeWidth: 2 },
     },
     data: {
       type: 'start',
@@ -670,26 +883,27 @@ const convertToX6Format = (backendData) => {
 
   // 添加成果节点
   backendData.achievements.forEach((achievement, index) => {
+    const nodeId = `achievement-${index}`
+    const statusColor =
+      achievement.status === 'approved'
+        ? '#67c23a'
+        : achievement.status === 'rejected'
+          ? '#f56c6c'
+          : achievement.status === 'pending'
+            ? '#e6a23c'
+            : '#909399'
     const node = {
-      id: achievement.id || `achievement-${index}`,
-      shape: 'rect',
+      id: nodeId,
+      shape: 'polygon',
+      points: '50,0 100,30 50,60 0,30',
       position: achievement.position || { x: 300 + index * 200, y: 200 },
-      size: { width: 120, height: 60 },
+      size: { width: 100, height: 60 },
       attrs: {
-        label: { text: achievement.achievementName },
+        label: { text: achievement.achievementName, fill: '#fff' },
         body: {
-          fill:
-            achievement.status === 'verified'
-              ? '#67c23a'
-              : achievement.status === 'pending'
-                ? '#e6a23c'
-                : '#909399',
-          stroke:
-            achievement.status === 'verified'
-              ? '#67c23a'
-              : achievement.status === 'pending'
-                ? '#e6a23c'
-                : '#909399',
+          fill: statusColor,
+          stroke: statusColor,
+          strokeWidth: 2,
         },
       },
       data: {
@@ -702,15 +916,21 @@ const convertToX6Format = (backendData) => {
         predictedScore: achievement.predictedScore,
         actualScore: achievement.actualScore,
         description: achievement.description,
+        attachmentName: achievement.attachmentName || '',
+        attachmentUrl: achievement.attachmentUrl || '',
       },
       ports: {
         groups: {
-          in: { position: 'left' },
-          out: { position: 'right' },
+          left: { position: 'left' },
+          right: { position: 'right' },
+          top: { position: 'top' },
+          bottom: { position: 'bottom' },
         },
         items: [
-          { id: 'in-1', group: 'in' },
-          { id: 'out-1', group: 'out' },
+          { id: 'left', group: 'left' },
+          { id: 'right', group: 'right' },
+          { id: 'top', group: 'top' },
+          { id: 'bottom', group: 'bottom' },
         ],
       },
     }
@@ -718,11 +938,12 @@ const convertToX6Format = (backendData) => {
 
     // 添加边（简化版，只连接起点和第一个节点）
     if (index === 0) {
+      const edgeId = `edge-${index}`
       const edge = {
-        id: `edge-${index}`,
+        id: edgeId,
         shape: 'edge',
         source: { cell: 'start', port: 'out-1' },
-        target: { cell: node.id, port: 'in-1' },
+        target: { cell: nodeId, port: 'left' },
         attrs: {
           line: {
             stroke: '#409eff',
@@ -736,13 +957,13 @@ const convertToX6Format = (backendData) => {
 
     // 添加后续节点之间的边
     if (index > 0) {
-      const prevNode = backendData.achievements[index - 1]
-      const prevNodeId = prevNode.id || `achievement-${index - 1}`
+      const prevNodeId = `achievement-${index - 1}`
+      const edgeId = `edge-${index}`
       const edge = {
-        id: `edge-${index}`,
+        id: edgeId,
         shape: 'edge',
-        source: { cell: prevNodeId, port: 'out-1' },
-        target: { cell: node.id, port: 'in-1' },
+        source: { cell: prevNodeId, port: 'right' },
+        target: { cell: nodeId, port: 'left' },
         attrs: {
           line: {
             stroke: '#409eff',
@@ -754,6 +975,30 @@ const convertToX6Format = (backendData) => {
       cells.push(edge)
     }
   })
+
+  // 添加结束节点
+  const endNode = {
+    id: 'end',
+    shape: 'rect',
+    position: { x: 800, y: 200 },
+    size: { width: 120, height: 40 },
+    attrs: {
+      label: { text: '结束节点', fill: '#fff' },
+      body: { fill: '#f56c6c', stroke: '#f56c6c', strokeWidth: 2 },
+    },
+    data: {
+      type: 'end',
+      achievementName: '结束节点',
+      status: 'pending',
+    },
+    ports: {
+      groups: {
+        in: { position: 'left' },
+      },
+      items: [{ id: 'in-1', group: 'in' }],
+    },
+  }
+  cells.push(endNode)
 
   console.log('转换后的 X6 数据:', { cells })
   return { cells }
@@ -795,7 +1040,6 @@ const handleFlowSave = () => {
   ElMessage.success('流程图已保存')
 }
 
-// 修改保存函数
 const handleSaveScore = async () => {
   try {
     // 验证必填项
@@ -839,12 +1083,9 @@ const handleSaveScore = async () => {
     }
 
     console.log('保存响应:', result)
-    console.log('响应类型:', typeof result)
-    console.log('是否有 code 属性:', 'code' in result)
-    console.log('code 值:', result?.code)
 
     // 更健壮的判断逻辑
-    if (result && typeof result === 'object' && result.code === 200) {
+    if (result) {
       const action = scoreForm.value.id ? '更新' : '创建'
       ElMessage.success(`成绩${action}成功`)
 
@@ -853,7 +1094,7 @@ const handleSaveScore = async () => {
       scoreDialogVisible.value = false
       console.log('✅ 数据刷新完成')
     } else {
-      ElMessage.error(result?.message || '保存失败')
+      ElMessage.error('保存失败')
     }
   } catch (error) {
     console.error('保存失败:', error)
@@ -870,7 +1111,7 @@ const simplifyGraphData = (flowData) => {
 
   // 提取成果节点
   flowData.cells.forEach((cell) => {
-    if (cell.shape === 'rect' && cell.data && cell.data.type === 'achievement') {
+    if (cell.shape === 'polygon' && cell.data && cell.data.type === 'achievement') {
       const achievement = {
         id: cell.id,
         achievementName: cell.data.achievementName || '未命名成果',
@@ -881,6 +1122,8 @@ const simplifyGraphData = (flowData) => {
         predictedScore: cell.data.predictedScore || 0,
         actualScore: cell.data.actualScore || 0,
         description: cell.data.description || '',
+        attachmentName: cell.data.attachmentName || '',
+        attachmentUrl: cell.data.attachmentUrl || '',
         position: {
           x: cell.position?.x || 0,
           y: cell.position?.y || 0,
@@ -914,10 +1157,6 @@ const simplifyGraphData = (flowData) => {
 }
 const handleValidateScore = async () => {
   try {
-    if (!scoreForm.value.attackTeamId) {
-      ElMessage.warning('请输入攻击单位ID')
-      return
-    }
     if (!scoreForm.value.defenseTeamId) {
       ElMessage.warning('请输入防守单位ID')
       return
@@ -948,6 +1187,52 @@ const handleNodeDoubleClick = (nodeData) => {
   console.log('节点双击:', nodeData)
 }
 
+// 处理弹窗关闭前的逻辑
+const handleDialogClose = (done) => {
+  // 检查流程图中是否有节点
+  if (flowRef.value) {
+    try {
+      const flowData = flowRef.value.getGraphData()
+      if (flowData && flowData.cells && flowData.cells.length > 0) {
+        // 过滤掉起点节点，只检查成果节点
+        const achievementNodes = flowData.cells.filter((cell) => {
+          return cell.shape === 'polygon' && cell.data && cell.data.type === 'achievement'
+        })
+
+        if (achievementNodes.length > 0) {
+          // 弹出提示对话框
+          ElMessageBox.confirm('您的画布上有未保存的内容，是否保存后关闭？', '确认关闭', {
+            confirmButtonText: '保存',
+            cancelButtonText: '不保存',
+            type: 'warning',
+            distinguishCancelAndClose: true,
+            closeOnClickModal: false,
+          })
+            .then(async () => {
+              // 用户选择保存
+              try {
+                await handleSaveScore()
+              } catch (error) {
+                console.error('保存失败:', error)
+              } finally {
+                done()
+              }
+            })
+            .catch(() => {
+              // 用户选择不保存，直接关闭
+              done()
+            })
+          return
+        }
+      }
+    } catch (error) {
+      console.error('检查画布节点失败:', error)
+    }
+  }
+  // 没有节点或出错，直接关闭
+  done()
+}
+
 const formatFullTime = (timeStr) => {
   if (!timeStr) return '-'
   try {
@@ -972,43 +1257,70 @@ const fetchData = async () => {
       limit: pagination.pageSize,
       data: { ...filterParams },
     }
-
-    console.log('📤 请求参数:', params)
+    console.log('请求参数:', params)
     const result = await attackScoreApi.getPageList(params)
-    console.log('📥 原始接口响应:', result)
-    console.log('📥 响应类型:', typeof result)
-    console.log('📥 是数组吗:', Array.isArray(result))
+    console.log('原始接口响应:', result)
 
-    // 修复：直接处理数组响应
+    // 调试：打印基础数据状态
+    console.log('当前基础数据状态:', {
+      defenseTeams: defenseTeams.value.length,
+      projects: projects.value.length,
+      defenseTeamsSample: defenseTeams.value.slice(0, 3),
+      projectsSample: projects.value.slice(0, 3),
+    })
+
+    let processedData = []
+
     if (Array.isArray(result)) {
-      // 接口直接返回了数据数组
-      tableData.value = result
-      pagination.total = result.length
-      console.log('✅ 数据解析成功（数组格式）:', result.length, '条数据')
-
-      if (result.length > 0) {
-        console.log('📊 第一行数据:', result[0])
-        console.log('🏷️ 字段名:', Object.keys(result[0]))
-      }
-    }
-    // 兼容对象格式
-    else if (result && result.code === 200 && Array.isArray(result.data)) {
-      tableData.value = result.data
+      processedData = result
+    } else if (result && result.code === 200 && Array.isArray(result.data)) {
+      processedData = result.data
       pagination.total = result.count || result.total || 0
-      console.log('✅ 数据解析成功（对象格式）:', result.data.length, '条数据')
-    }
-    // 其他情况
-    else {
-      console.warn('❌ 无法识别的响应格式:', result)
-      tableData.value = []
+    } else {
+      processedData = []
       pagination.total = 0
     }
 
-    console.log('🎯 最终表格数据:', tableData.value)
-    console.log('🎯 表格数据长度:', tableData.value.length)
+    // 详细的数据映射逻辑
+    tableData.value = processedData.map((item) => {
+      console.log('处理单条数据:', item)
+
+      // 查找防守队伍名称
+      const defenseTeam = defenseTeams.value.find((team) => team.id === item.defenseTeamId)
+      console.log('防守队伍查找:', {
+        defenseTeamId: item.defenseTeamId,
+        defenseTeams: defenseTeams.value.map((t) => ({ id: t.id, name: t.teamName })),
+        found: defenseTeam,
+      })
+
+      // 查找项目名称
+      const project = projects.value.find(
+        (proj) => String(proj.id) === String(item.projectId), // 关键修复：统一类型
+      )
+      console.log('项目查找:', {
+        projectId: item.projectId,
+        projects: projects.value.map((p) => ({ id: p.id, name: p.projectName })),
+        found: project,
+      })
+
+      return {
+        ...item,
+        // 保持原始字段
+        defenseTeamld: item.defenseTeamId,
+        projectld: item.projectId,
+        // 映射名称字段
+        defenseTeamName: defenseTeam ? defenseTeam.teamName : '-',
+        projectName: project?.projectName || '未知项目', // 更明确的占位符
+        attackTeamName: item.attackTeamId
+          ? attackTeams.value.find((team) => team.id === item.attackTeamId)?.teamName || '-'
+          : '-',
+      }
+    })
+
+    console.log('最终表格数据:', tableData.value)
   } catch (error) {
-    console.error('❌ 获取数据失败:', error)
-    ElMessage.error('获取数据失败: ' + error.message)
+    console.error('获取数据失败:', error)
+    ElMessage.error('获取数据失败:' + error.message)
   } finally {
     loading.value = false
   }
@@ -1019,11 +1331,54 @@ const scoreDialogTitle = computed(() => {
   return scoreForm.value.id ? '编辑攻击成绩' : '新增攻击成绩'
 })
 
-// 初始化
-onMounted(() => {
-  fetchData()
-  loadTeamsAndProjects()
+onMounted(async () => {
+  console.log('开始加载基础数据...')
+  await loadTeamsAndProjects() // 等待基础数据加载完成
+  console.log('基础数据加载完成，开始加载表格数据...')
+  await fetchData() // 再加载表格数据
+  console.log('所有数据加载完成')
 })
+
+// 确保 loadTeamsAndProjects 返回 Promise
+const loadTeamsAndProjects = async () => {
+  try {
+    console.log('正在加载攻击队伍...')
+    const attackTeamParams = {
+      page: 1,
+      limit: 1000,
+      data: { teamType: 'attack' },
+    }
+    const attackResult = await teamApi.getPageList(attackTeamParams)
+    attackTeams.value = attackResult.data || []
+    console.log('攻击队伍加载完成:', attackTeams.value.length)
+
+    console.log('正在加载防守队伍...')
+    const defenseTeamParams = {
+      page: 1,
+      limit: 1000,
+      data: { teamType: 'defense' },
+    }
+    const defenseResult = await teamApi.getPageList(defenseTeamParams)
+    defenseTeams.value = defenseResult.data || []
+    console.log('防守队伍加载完成:', defenseTeams.value.length)
+
+    console.log('正在加载项目...')
+    const projectParams = {
+      page: 1,
+      limit: 1000,
+      data: {},
+    }
+    const projectResult = await projectApi.getPageList(projectParams)
+    projects.value = projectResult.data || []
+    console.log('项目加载完成:', projects.value.length)
+
+    return true // 明确返回完成状态
+  } catch (error) {
+    console.error('加载基础数据失败:', error)
+    ElMessage.error('加载基础数据失败')
+    return false
+  }
+}
 </script>
 
 <style scoped lang="scss">
@@ -1232,7 +1587,7 @@ onMounted(() => {
 // 弹窗样式
 .score-dialog {
   .dialog-content {
-    max-height: 70vh;
+    max-height: 80vh;
     overflow-y: auto;
   }
 
@@ -1241,7 +1596,7 @@ onMounted(() => {
   }
 
   .flow-section {
-    min-height: 500px;
+    min-height: 600px;
   }
 
   .card-header {

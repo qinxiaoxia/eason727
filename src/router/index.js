@@ -40,17 +40,6 @@ export const dynamicRoutes = [
           permits: ['attackResult:list'],
         },
       },
-
-      {
-        path: '/attack/AttackScore',
-        component: () => import('@/views/attack/AttackScore.vue'),
-        meta: {
-          title: '攻击成绩',
-          hideSidebar: true,
-          permits: ['attackResult:list'],
-          requiresAuth: true,
-        },
-      },
       {
         path: 'attack',
         redirect: '/attack/AttackScore',
@@ -83,23 +72,22 @@ export const dynamicRoutes = [
         ],
       },
       {
-        path: '/asset/AssetManagement',
-        component: () => import('@/views/asset/AssetManagement.vue'),
-        meta: {
-          title: '资源管理',
-          hideSidebar: true,
-          permits: ['asset:list', 'attackAsset:list'],
-          requiresAuth: true,
-        },
-      },
-
-      {
         path: '/attack/AttackRequest',
         component: () => import('@/views/attack/AttackRequest.vue'),
         meta: {
           title: '攻击申请',
           hideSidebar: true,
           permits: ['attackRequest:list'],
+          requiresAuth: true,
+        },
+      },
+      {
+        path: '/asset/AssetManagement',
+        component: () => import('@/views/asset/AssetManagement.vue'),
+        meta: {
+          title: '资源管理',
+          hideSidebar: true,
+          permits: ['asset:list', 'attackAsset:list'],
           requiresAuth: true,
         },
       },
