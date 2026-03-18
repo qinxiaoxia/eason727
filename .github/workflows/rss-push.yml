@@ -36,7 +36,8 @@ jobs:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
           LLM_MODEL: ${{ secrets.LLM_MODEL }}
-          PUSH_SCHEDULED_NOW: ${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch') && '1' || '' }}
+          # 仅手动触发(workflow_dispatch)时强制推送定时类；Zeabur/cron 触发时只在 9:30/15:30 推送
+          PUSH_SCHEDULED_NOW: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
         run: |
           cd rss-wechat-pusher
           cp config.example.py config.py
