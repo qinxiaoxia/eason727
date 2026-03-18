@@ -8,8 +8,9 @@ name: RSS Push
 
 on:
   schedule:
-    - cron: "*/5 * * * *"   # 每 5 分钟：监管机构预警、重大安全事件→立即推送；9:30、15:30 北京→定时推送
+    - cron: "2,7,12,17,22,27,32,37,42,47,52,57 * * * *"   # 每 5 分钟（避开整点减少延迟）
   workflow_dispatch:
+  repository_dispatch:   # 外部定时服务可调用 API 触发，作为 schedule 不生效时的备用
 
 jobs:
   push:
@@ -39,7 +40,7 @@ jobs:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
           LLM_MODEL: ${{ secrets.LLM_MODEL }}
-          PUSH_SCHEDULED_NOW: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
+          PUSH_SCHEDULED_NOW: ${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch') && '1' || '' }}
         run: |
           cd rss-wechat-pusher
           cp config.example.py config.py
