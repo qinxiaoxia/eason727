@@ -375,11 +375,16 @@ def send_wechat(webhook, content, use_markdown=True):
 
 
 def is_scheduled_time():
-    """当前是否在定时推送时间窗口内"""
-    now = datetime.now()
+    """当前是否在定时推送时间窗口内（使用北京时区，兼容 GitHub Actions UTC 环境）"""
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo("Asia/Shanghai")
+        now = datetime.now(tz)
+    except ImportError:
+        now = datetime.now()
     for h, m in SCHEDULED_PUSH_TIMES:
-        start = datetime(now.year, now.month, now.day, h, m - SCHEDULED_WINDOW_MINUTES)
-        end = datetime(now.year, now.month, now.day, h, m + SCHEDULED_WINDOW_MINUTES)
+        start = datetime(now.year, now.month, now.day, h, m - SCHEDULED_WINDOW_MINUTES, tzinfo=getattr(now, "tzinfo", None))
+        end = datetime(now.year, now.month, now.day, h, m + SCHEDULED_WINDOW_MINUTES, tzinfo=getattr(now, "tzinfo", None))
         if start <= now <= end:
             return True
     return False
@@ -453,8 +458,8 @@ def main():
         conn.commit()
         print(f"实时推送 {len(new_realtime)} 条")
 
-    # 3. 定时推送（时间窗口内 或 手动加 --push-now）
-    if is_scheduled_time() or "--push-now" in sys.argv:
+    # 3. 定时推送（时间窗口内 或 手动加 --push-now 或 Actions 手动触发）
+    if is_scheduled_time() or "--push-now" in sys.argv or os.getenv("PUSH_SCHEDULED_NOW") == "1":
         ph = ",".join("?" * len(SCHEDULED_CATEGORIES))
         cur = conn.execute(
             f"""SELECT link, title, published_str, category FROM articles
