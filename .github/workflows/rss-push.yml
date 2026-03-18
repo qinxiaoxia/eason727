@@ -29,7 +29,7 @@ jobs:
       - name: Restore DB
         uses: actions/cache@v4
         with:
-          path: ~/.rss-wechat-pusher
+          path: /home/runner/.rss-wechat-pusher
           key: rss-push-db-${{ runner.os }}-v1
 
       - name: Run RSS Push
