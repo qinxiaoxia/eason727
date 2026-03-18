@@ -1,0 +1,45 @@
+# RSS 推送到企业微信
+# 部署说明：
+# - 实时推送：监管机构预警、重大安全事件 → 立即推送
+# - 定时推送：每天 9:30、15:30（北京）→ 漏洞信息、网安新闻资讯、网安赛事资讯、其他资讯，按类别合并
+# - 推送后标记已推送，避免重复
+# Secrets: WECHAT_WEBHOOK, FEEDS_JSON (必填) | LLM_API_KEY, LLM_BASE_URL, LLM_MODEL (可选)
+name: RSS Push
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # 每 30 分钟，覆盖 9:30、15:30 北京
+  workflow_dispatch:
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r rss-wechat-pusher/requirements.txt
+
+      - name: Restore DB
+        uses: actions/cache@v4
+        with:
+          path: ~/.rss-wechat-pusher
+          key: rss-push-db-${{ runner.os }}-v1
+
+      - name: Run RSS Push
+        env:
+          WECHAT_WEBHOOK: ${{ secrets.WECHAT_WEBHOOK }}
+          FEEDS_JSON: ${{ secrets.FEEDS_JSON }}
+          WEWE_RSS_URL: ${{ secrets.WEWE_RSS_URL }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+        run: |
+          cd rss-wechat-pusher
+          cp config.example.py config.py
+          python main.py

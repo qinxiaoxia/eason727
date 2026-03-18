@@ -1,0 +1,99 @@
+"""
+文章分类器
+- 监管机构预警：规则判断（所有源统一规则）
+  - 国家网络安全通报中心 + 标题以「重点防范」开头
+  - 国家互联网应急中心CNCERT + 标题以「关于」开头且包含「风险提示」
+  → 立即推送
+- 其余：大模型细分类 → 漏洞信息、重大安全事件、网安新闻资讯、网安赛事资讯、其他资讯
+"""
+from typing import Optional
+
+import requests
+
+# 实时推送类别（检测到立即推送）
+REALTIME_CATEGORIES = {"监管机构预警", "重大安全事件"}
+
+# 定时推送类别（9:30、15:30 汇总推送）
+SCHEDULED_CATEGORIES = {"漏洞信息", "网安新闻资讯", "网安赛事资讯", "其他资讯"}
+
+# 大模型可选分类
+LLM_CATEGORIES = ["漏洞信息", "重大安全事件", "网安新闻资讯", "网安赛事资讯", "其他资讯"]
+
+# 监管机构预警规则：(作者/公众号名, 标题判断函数)
+ALERT_RULES = [
+    ("国家网络安全通报中心", lambda t: (t or "").strip().startswith("重点防范")),
+    ("国家互联网应急中心CNCERT", lambda t: (t or "").strip().startswith("关于") and "风险提示" in (t or "")),
+]
+
+
+def classify_by_rules(author: str, title: str, source_type: str) -> Optional[str]:
+    """规则分类，所有源统一规则。"""
+    author = (author or "").strip()
+    title = (title or "").strip()
+    for rule_author, title_check in ALERT_RULES:
+        if rule_author in author and title_check(title):
+            return "监管机构预警"
+    return None
+
+
+def _call_llm(api_key: str, base_url: str, model: str, text: str) -> Optional[str]:
+    """调用 OpenAI 兼容 API 进行分类。"""
+    url = base_url.rstrip("/") + "/chat/completions"
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    prompt = f"""将以下网络安全相关文章分类，只返回一个分类名，不要其他内容。
+
+分类选项：漏洞信息、重大安全事件、网安新闻资讯、网安赛事资讯、其他资讯
+
+- 漏洞信息：CVE、漏洞披露、补丁发布、安全更新
+- 重大安全事件：大规模攻击、数据泄露、勒索软件、APT、重大安全事故
+- 网安新闻资讯：行业动态、政策法规、企业动态、技术解读
+- 网安赛事资讯：CTF、攻防演练、安全竞赛
+- 其他资讯：无法归入以上类别
+
+文章内容：
+{text}
+
+分类："""
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 20,
+        "temperature": 0,
+    }
+    try:
+        r = requests.post(url, json=payload, headers=headers, timeout=15)
+        r.raise_for_status()
+        data = r.json()
+        content = (data.get("choices", [{}])[0].get("message", {}).get("content") or "").strip()
+        # 提取分类名（可能带引号或多余字符）
+        for cat in LLM_CATEGORIES:
+            if cat in content:
+                return cat
+        return "其他资讯"
+    except Exception:
+        return None
+
+
+def classify(author: str, title: str, summary: str, source_type: str) -> str:
+    """
+    分类入口。
+    - 先走规则，命中则返回「监管机构预警」
+    - 否则调用大模型（若已配置），否则返回「其他资讯」
+    """
+    cat = classify_by_rules(author, title, source_type)
+    if cat:
+        return cat
+
+    try:
+        from config import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
+    except ImportError:
+        return "其他资讯"
+
+    if not (LLM_API_KEY and LLM_BASE_URL and LLM_MODEL):
+        return "其他资讯"
+
+    # 拼接文本，摘要截断避免超长
+    summary_short = (summary or "")[:800].strip()
+    text = f"标题：{title or ''}\n作者：{author or ''}\n摘要：{summary_short}"
+    result = _call_llm(LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, text)
+    return result if result else "其他资讯"
