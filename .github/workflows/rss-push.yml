@@ -8,7 +8,7 @@ name: RSS Push
 
 on:
   schedule:
-    - cron: "2,7,12,17,22,27,32,37,42,47,52,57 * * * *"   # 每 5 分钟（避开整点减少延迟）
+    - cron: "2 * * * *"   # 每 1 小时（整点后 2 分钟，避开延迟）
   workflow_dispatch:
   repository_dispatch:   # 外部定时服务可调用 API 触发，作为 schedule 不生效时的备用
 
