@@ -50,10 +50,14 @@ except ImportError:
         print("请复制 config.example.py 为 config.py 并填写配置")
         sys.exit(1)
 
-# 数据库放用户目录，避免桌面/iCloud 同步导致锁定
-DB_DIR = Path(os.path.expanduser("~/.rss-wechat-pusher"))
-DB_DIR.mkdir(exist_ok=True)
-DB_PATH = DB_DIR / "rss_push.db"
+# 数据库路径：CI 下用仓库内文件（可持久化），本地用用户目录
+if os.getenv("CI") and os.getenv("GITHUB_WORKSPACE"):
+    DB_DIR = Path(os.getenv("GITHUB_WORKSPACE")) / "rss-wechat-pusher"
+    DB_PATH = DB_DIR / "rss_push.db"
+else:
+    DB_DIR = Path(os.path.expanduser("~/.rss-wechat-pusher"))
+    DB_DIR.mkdir(exist_ok=True)
+    DB_PATH = DB_DIR / "rss_push.db"
 # 企业微信 markdown 单条上限 4096 字节（中文约 3 字节/字），超长自动分片
 MAX_CONTENT_BYTES = int(os.getenv("WECHAT_MAX_BYTES", "3800"))
 
