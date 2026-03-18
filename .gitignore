@@ -28,3 +28,6 @@ coverage
 *.sw?
 
 *.tsbuildinfo
+
+# 独立部署的 Zeabur 触发器，推送到 rss-push-trigger 仓库
+rss-push-trigger/
