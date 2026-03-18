@@ -91,18 +91,14 @@ git push -u origin main
 
 ---
 
-## 第四步：若 schedule 不生效，用外部定时服务兜底
+## 第四步：若 schedule 不生效，用 Zeabur 兜底
 
-GitHub 的 schedule 有时不触发（fork 默认禁用、60 天无活动等）。可用 [cron-job.org](https://cron-job.org) 每 5 分钟调用 GitHub API 触发：
+GitHub 的 schedule 有时不触发（fork 默认禁用、60 天无活动等）。可部署 `zeabur-cron-trigger` 到 Zeabur，每 5 分钟自动触发：
 
-1. 注册 https://cron-job.org（免费）
-2. 创建 Cronjob：
-   - **URL**：`https://api.github.com/repos/qinxiaoxia/eason727/actions/workflows/rss-push.yml/dispatches`
-   - **Request Method**：POST
-   - **Request Headers**：`Authorization: Bearer 你的GitHub_PAT`、`Accept: application/vnd.github+json`、`X-GitHub-Api-Version: 2022-11-28`
-   - **Request Body**：`{"ref":"main"}`（raw JSON）
-   - **Interval**：每 5 分钟
-3. PAT 需有 `repo` 权限，在 https://github.com/settings/tokens 创建
+1. 打开 [Zeabur](https://zeabur.com)，创建项目，从 GitHub 导入 `qinxiaoxia/eason727` 仓库
+2. 添加服务，选择该仓库，**Root Directory** 设为 `zeabur-cron-trigger`
+3. 配置环境变量：`GITHUB_TOKEN` = 你的 GitHub PAT（需 `repo` 权限）
+4. 部署后服务常驻，每 5 分钟触发一次 RSS Push
 
 ---
 
@@ -128,7 +124,7 @@ A：检查 WECHAT_WEBHOOK 是否完整、是否复制错；检查企业微信机
 A：编辑 `.github/workflows/rss-push.yml`，修改 `cron` 表达式。当前为每 5 分钟。
 
 **Q：schedule 不触发、只有手动运行？**  
-A：可能是 fork 或 60 天无活动导致 schedule 被禁用。用第四步的 cron-job.org 兜底，或到 Actions → RSS Push 检查是否有「Enable workflow」。
+A：可能是 fork 或 60 天无活动导致 schedule 被禁用。用第四步的 Zeabur 触发器兜底，或到 Actions → RSS Push 检查是否有「Enable workflow」。
 
 **Q：数据库会持久化吗？**  
 A：会。使用 GitHub Actions Cache 缓存 `~/.rss-wechat-pusher` 目录，避免重复推送。
