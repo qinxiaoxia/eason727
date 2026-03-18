@@ -521,7 +521,10 @@ def main():
         print(f"实时推送 {len(new_realtime)} 条")
 
     # 3. 定时推送（9:30、15:30 北京，全部 6 类，与实时去重）
-    if is_scheduled_time() or "--push-now" in sys.argv or os.getenv("PUSH_SCHEDULED_NOW") == "1":
+    # 轮巡时仅推监管预警+重大事件；定时类(漏洞/新闻/赛事/其他)仅在 slot 内或手动触发时推
+    slot = _get_scheduled_slot()
+    force_now = "--push-now" in sys.argv or os.getenv("PUSH_SCHEDULED_NOW") == "1"
+    if slot is not None or force_now:
         ph = ",".join("?" * len(SCHEDULED_CATEGORIES))
         cur = conn.execute(
             f"""SELECT link, title, published_str, category, author FROM articles
@@ -529,7 +532,6 @@ def main():
             tuple(SCHEDULED_CATEGORIES),
         )
         rows = cur.fetchall()
-        slot = _get_scheduled_slot()
         if slot == (15, 30):
             rows = [(l, t, ps, c, a) for l, t, ps, c, a in rows if _is_today_beijing(_parse_published_to_beijing(ps))]
         elif slot == (9, 30):
