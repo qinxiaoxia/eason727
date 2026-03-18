@@ -1,10 +1,18 @@
 #!/bin/bash
 # 部署到 GitHub eason727 仓库
-# 用法：cd /Users/hehe/Desktop/备份勿动/vue-admin && bash rss-wechat-pusher/deploy-to-github.sh
+# 用法：GITHUB_TOKEN=你的token bash rss-wechat-pusher/deploy-to-github.sh
+# 或先 export GITHUB_TOKEN=你的token，再 bash rss-wechat-pusher/deploy-to-github.sh
 
 set -e
 cd "$(dirname "$0")/.."
 REPO="https://github.com/qinxiaoxia/eason727.git"
+
+# 若有 GITHUB_TOKEN，用带 token 的 URL 推送
+if [ -n "$GITHUB_TOKEN" ]; then
+  PUSH_URL="https://qinxiaoxia:${GITHUB_TOKEN}@github.com/qinxiaoxia/eason727.git"
+else
+  PUSH_URL="$REPO"
+fi
 
 echo "=== 1. 修改远程地址为 eason727 ==="
 git remote set-url origin "$REPO" 2>/dev/null || git remote add origin "$REPO"
@@ -20,8 +28,8 @@ else
   git commit -m "rss-wechat-pusher"
 fi
 git branch -M main
-echo "正在推送到 $REPO ..."
-git push -u origin main
+echo "正在推送到 eason727 ..."
+git push -u "$PUSH_URL" main
 
 echo ""
 echo "=== 部署完成 ==="
