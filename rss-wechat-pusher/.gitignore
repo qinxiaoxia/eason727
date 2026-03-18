@@ -1,5 +1,6 @@
 config.py
 seen_links.db
 rss_push.db
+rss_push.db-journal
 __pycache__/
 *.pyc
