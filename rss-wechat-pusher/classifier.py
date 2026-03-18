@@ -10,11 +10,12 @@ from typing import Optional
 
 import requests
 
-# 实时推送类别（检测到立即推送）
+# 实时推送类别（每 5 分钟检测到立即推送）
 REALTIME_CATEGORIES = {"监管机构预警", "重大安全事件"}
 
-# 定时推送类别（9:30、15:30 汇总推送）
-SCHEDULED_CATEGORIES = {"漏洞信息", "网安新闻资讯", "网安赛事资讯", "其他资讯"}
+# 定时推送类别（9:30、15:30 汇总推送，含全部 6 类，与实时去重）
+ALL_CATEGORIES = ["监管机构预警", "重大安全事件", "漏洞信息", "网安新闻资讯", "网安赛事资讯", "其他资讯"]
+SCHEDULED_CATEGORIES = set(ALL_CATEGORIES)
 
 # 大模型可选分类
 LLM_CATEGORIES = ["漏洞信息", "重大安全事件", "网安新闻资讯", "网安赛事资讯", "其他资讯"]

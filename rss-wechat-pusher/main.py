@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
-RSS 推送到企业微信机器人（需求版）
-- 多源：微信公众号（WeWe RSS）+ 7 个 RSS
-- 分类：规则（监管机构预警）+ 大模型（Phase 2，暂归其他资讯）
-- 实时推送：监管机构预警、重大安全事件
-- 定时推送：9:30、15:30 汇总其余类别
-- 推送格式：【信息类型】【标题】【时间】【链接】
+RSS 推送到企业微信机器人
+- 6 类：监管机构预警、漏洞信息、重大安全事件、网安新闻资讯、网安赛事资讯、其他资讯
+- 1）每 5 分钟：监管机构预警、重大安全事件→立即推送（去重）
+- 2）9:30、15:30 北京：全部 6 类→定时推送（与 1 去重）
+- 3）国家网络安全通报中心+重点防范：有 IOC 用特殊格式，无则按 1
 """
 
 import os
@@ -462,26 +461,27 @@ def main():
         conn.commit()
         print(f"实时推送 {len(new_realtime)} 条")
 
-    # 3. 定时推送（时间窗口内 或 手动加 --push-now 或 Actions 手动触发）
+    # 3. 定时推送（9:30、15:30 北京，全部 6 类，与实时去重）
     if is_scheduled_time() or "--push-now" in sys.argv or os.getenv("PUSH_SCHEDULED_NOW") == "1":
         ph = ",".join("?" * len(SCHEDULED_CATEGORIES))
         cur = conn.execute(
-            f"""SELECT link, title, published_str, category FROM articles
+            f"""SELECT link, title, published_str, category, author FROM articles
                WHERE category IN ({ph}) AND link NOT IN (SELECT link FROM pushed)""",
             tuple(SCHEDULED_CATEGORIES),
         )
         rows = cur.fetchall()
         if rows:
             by_cat = {}
-            for link, title, published_str, category in rows:
+            for link, title, published_str, category, author in rows:
                 by_cat.setdefault(category, []).append({
                     "title": title,
                     "published_str": published_str,
                     "link": link,
+                    "author": author or "",
                 })
             send_wechat_per_category(WECHAT_WEBHOOK, by_cat)
             now = datetime.now().isoformat()
-            for link, _, _, _ in rows:
+            for link, *_ in rows:
                 conn.execute(
                     "INSERT OR IGNORE INTO pushed (link, pushed_at, push_type) VALUES (?, ?, ?)",
                     (link, now, "scheduled"),
