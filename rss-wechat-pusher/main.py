@@ -2,9 +2,10 @@
 """
 RSS 推送到企业微信机器人
 - 6 类：监管机构预警、漏洞信息、重大安全事件、网安新闻资讯、网安赛事资讯、其他资讯
-- 1）每 5 分钟：监管机构预警、重大安全事件→立即推送（去重）
-- 2）9:30、15:30 北京：全部 6 类→定时推送（与 1 去重）
-- 3）国家网络安全通报中心+重点防范：有 IOC 用特殊格式，无则按 1
+- 1）实时：监管机构预警、重大安全事件→仅推送当天（去重）
+- 2）15:30 北京：全部 6 类→仅推送当天
+- 3）9:30 北京：全部 6 类→仅推送前一天 15:30 至当天 9:30
+- 4）国家网络安全通报中心+重点防范：有 IOC 用特殊格式，无则按 1
 """
 
 import os
@@ -13,7 +14,7 @@ import sqlite3
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import feedparser
@@ -93,6 +94,62 @@ def get_pushed_links(conn):
     """已推送的链接"""
     cur = conn.execute("SELECT link FROM pushed")
     return {row[0] for row in cur.fetchall()}
+
+
+def _parse_published_to_beijing(published_str):
+    """解析 published_str（假定 UTC）为北京时区 datetime"""
+    if not published_str or not isinstance(published_str, str):
+        return None
+    try:
+        s = published_str.strip()[:16]
+        utc = datetime.strptime(s, "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+        from zoneinfo import ZoneInfo
+        return utc.astimezone(ZoneInfo("Asia/Shanghai"))
+    except Exception:
+        return None
+
+
+def _is_today_beijing(dt):
+    """是否北京时间的当天"""
+    if not dt:
+        return False
+    try:
+        from zoneinfo import ZoneInfo
+        now = datetime.now(ZoneInfo("Asia/Shanghai"))
+        return dt.date() == now.date()
+    except ImportError:
+        return False
+
+
+def _is_in_930_window(dt):
+    """是否在前一天 15:30 至当天 9:30 之间（北京）"""
+    if not dt:
+        return False
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo("Asia/Shanghai")
+        now = datetime.now(tz)
+        today_930 = now.replace(hour=9, minute=30, second=0, microsecond=0)
+        yesterday_1530 = (now - timedelta(days=1)).replace(hour=15, minute=30, second=0, microsecond=0)
+        return yesterday_1530 <= dt <= today_930
+    except ImportError:
+        return False
+
+
+def _get_scheduled_slot():
+    """当前若在定时窗口内，返回 (9,30) 或 (15,30)，否则 None"""
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo("Asia/Shanghai")
+        now = datetime.now(tz)
+    except ImportError:
+        now = datetime.now()
+    for h, m in SCHEDULED_PUSH_TIMES:
+        start = datetime(now.year, now.month, now.day, h, m - SCHEDULED_WINDOW_MINUTES, tzinfo=getattr(now, "tzinfo", None))
+        end = datetime(now.year, now.month, now.day, h, m + SCHEDULED_WINDOW_MINUTES, tzinfo=getattr(now, "tzinfo", None))
+        if start <= now <= end:
+            return (h, m)
+    return None
 
 
 def parse_date(entry):
@@ -441,9 +498,11 @@ def main():
         )
         known.add(link)
         if category in REALTIME_CATEGORIES and link not in pushed:
-            new_realtime.append({
-                "title": title, "published_str": published_str, "link": link, "category": category, "author": author or ""
-            })
+            dt_bj = _parse_published_to_beijing(published_str)
+            if _is_today_beijing(dt_bj):
+                new_realtime.append({
+                    "title": title, "published_str": published_str, "link": link, "category": category, "author": author or ""
+                })
 
     conn.commit()
 
@@ -470,6 +529,13 @@ def main():
             tuple(SCHEDULED_CATEGORIES),
         )
         rows = cur.fetchall()
+        slot = _get_scheduled_slot()
+        if slot == (15, 30):
+            rows = [(l, t, ps, c, a) for l, t, ps, c, a in rows if _is_today_beijing(_parse_published_to_beijing(ps))]
+        elif slot == (9, 30):
+            rows = [(l, t, ps, c, a) for l, t, ps, c, a in rows if _is_in_930_window(_parse_published_to_beijing(ps))]
+        elif "--push-now" in sys.argv or os.getenv("PUSH_SCHEDULED_NOW") == "1":
+            rows = [(l, t, ps, c, a) for l, t, ps, c, a in rows if _is_today_beijing(_parse_published_to_beijing(ps))]
         if rows:
             by_cat = {}
             for link, title, published_str, category, author in rows:
