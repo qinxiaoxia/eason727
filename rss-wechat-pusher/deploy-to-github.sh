@@ -29,7 +29,8 @@ else
 fi
 git branch -M main
 echo "正在推送到 eason727 ..."
-git push -u "$PUSH_URL" main
+# 跳过 LFS 上传，避免国内网络超时（rss-wechat-pusher 无 LFS 文件）
+GIT_LFS_SKIP_PUSH=1 git push -u "$PUSH_URL" main
 
 echo ""
 echo "=== 部署完成 ==="
