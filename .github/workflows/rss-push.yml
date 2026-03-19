@@ -8,7 +8,7 @@ name: RSS Push
 
 on:
   schedule:
-    - cron: "2 * * * *"   # 每 1 小时（整点后 2 分钟，避开延迟）
+    - cron: "30 * * * *"   # 每小时 :30 UTC，1:30=9:30北京、7:30=15:30北京，命中定时推送窗口
   workflow_dispatch:
   repository_dispatch:   # 外部定时服务可调用 API 触发，作为 schedule 不生效时的备用
 
