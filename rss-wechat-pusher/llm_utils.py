@@ -106,6 +106,8 @@ def call_llm_with_fallback(messages: list, max_tokens: int = 20) -> Optional[str
             data = r.json()
             content = (data.get("choices", [{}])[0].get("message", {}).get("content") or "").strip()
             if content:
+                # 打印当前使用的模型（可在 Actions 日志中查看）
+                print(f"[LLM] 使用模型: {model}", flush=True)
                 return content
         except Exception:
             continue

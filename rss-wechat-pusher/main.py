@@ -444,7 +444,8 @@ def is_scheduled_time():
 
 def main():
     # 1. 并行拉取所有源（8 个同时请求，大幅提速）
-    all_new = []  # [(link, title, summary, category, author, feed_url, published_str), ...]
+    # all_new: (link, title, summary, category, author, feed_url, published_str, source_type)
+    all_new = []
 
     def fetch_one(feed_url, source_type):
         entries = fetch_feed(feed_url)
@@ -464,7 +465,7 @@ def main():
                     author = get_author(entry)
                     published_str = format_published(entry)
                     category = classify(author, title, summary, source_type)
-                    all_new.append((link, title, summary, category, author, feed_url, published_str))
+                    all_new.append((link, title, summary, category, author, feed_url, published_str, source_type))
             except Exception as e:
                 url, st = futures[future]
                 print(f"拉取失败 {url}: {e}")
@@ -479,7 +480,7 @@ def main():
 
     new_realtime = []
     now_str = datetime.now().isoformat()
-    for link, title, summary, category, author, feed_url, published_str in all_new:
+    for link, title, summary, category, author, feed_url, published_str, source_type in all_new:
         if link in known:
             continue
         conn.execute(
@@ -489,6 +490,7 @@ def main():
             (link, title, summary, category, author, feed_url, published_str, now_str),
         )
         known.add(link)
+        # 监管预警、重大事件→实时推送（公众号+网站均支持，以分类为准）
         if category in REALTIME_CATEGORIES and link not in pushed:
             dt_bj = _parse_published_to_beijing(published_str)
             if _is_today_beijing(dt_bj):
