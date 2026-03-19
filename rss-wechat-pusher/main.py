@@ -165,10 +165,15 @@ def parse_date(entry):
 
 
 def format_published(entry):
-    """格式化为 YYYY-MM-DD HH:mm"""
+    """格式化为 YYYY-MM-DD HH:mm（北京时间，国外源统一换算）"""
     dt = parse_date(entry)
     if dt:
-        return dt.strftime("%Y-%m-%d %H:%M")
+        try:
+            from zoneinfo import ZoneInfo
+            dt_bj = dt.astimezone(ZoneInfo("Asia/Shanghai"))
+            return dt_bj.strftime("%Y-%m-%d %H:%M")
+        except ImportError:
+            return dt.strftime("%Y-%m-%d %H:%M")
     return ""
 
 
