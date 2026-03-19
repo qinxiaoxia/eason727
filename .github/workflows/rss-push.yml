@@ -33,6 +33,7 @@ jobs:
           WECHAT_WEBHOOK: ${{ secrets.WECHAT_WEBHOOK }}
           FEEDS_JSON: ${{ secrets.FEEDS_JSON }}
           WEWE_RSS_URL: ${{ secrets.WEWE_RSS_URL }}
+          LLM_MODELS_JSON: ${{ secrets.LLM_MODELS_JSON }}
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
           LLM_MODEL: ${{ secrets.LLM_MODEL }}

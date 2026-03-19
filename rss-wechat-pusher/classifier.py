@@ -8,8 +8,6 @@
 """
 from typing import Optional
 
-import requests
-
 # 实时推送类别（每 5 分钟检测到立即推送）
 REALTIME_CATEGORIES = {"监管机构预警", "重大安全事件"}
 
@@ -37,10 +35,10 @@ def classify_by_rules(author: str, title: str, source_type: str) -> Optional[str
     return None
 
 
-def _call_llm(api_key: str, base_url: str, model: str, text: str) -> Optional[str]:
-    """调用 OpenAI 兼容 API 进行分类。"""
-    url = base_url.rstrip("/") + "/chat/completions"
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+def _call_llm_classify(text: str) -> Optional[str]:
+    """调用 LLM 进行分类，支持多模型自动切换（额度用尽时换下一个）。"""
+    from llm_utils import call_llm_with_fallback
+
     prompt = f"""将以下网络安全相关文章分类，只返回一个分类名，不要其他内容。
 
 分类选项：漏洞信息、重大安全事件、网安新闻资讯、网安赛事资讯、其他资讯
@@ -55,46 +53,30 @@ def _call_llm(api_key: str, base_url: str, model: str, text: str) -> Optional[st
 {text}
 
 分类："""
-    payload = {
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 20,
-        "temperature": 0,
-    }
-    try:
-        r = requests.post(url, json=payload, headers=headers, timeout=15)
-        r.raise_for_status()
-        data = r.json()
-        content = (data.get("choices", [{}])[0].get("message", {}).get("content") or "").strip()
-        # 提取分类名（可能带引号或多余字符）
-        for cat in LLM_CATEGORIES:
-            if cat in content:
-                return cat
-        return "其他资讯"
-    except Exception:
+    content = call_llm_with_fallback([{"role": "user", "content": prompt}], max_tokens=20)
+    if not content:
         return None
+    for cat in LLM_CATEGORIES:
+        if cat in content:
+            return cat
+    return "其他资讯"
 
 
 def classify(author: str, title: str, summary: str, source_type: str) -> str:
     """
     分类入口。
     - 先走规则，命中则返回「监管机构预警」
-    - 否则调用大模型（若已配置），否则返回「其他资讯」
+    - 否则调用大模型（若已配置，支持多模型自动切换），否则返回「其他资讯」
     """
     cat = classify_by_rules(author, title, source_type)
     if cat:
         return cat
 
-    try:
-        from config import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
-    except ImportError:
+    from llm_utils import get_llm_providers
+    if not get_llm_providers():
         return "其他资讯"
 
-    if not (LLM_API_KEY and LLM_BASE_URL and LLM_MODEL):
-        return "其他资讯"
-
-    # 拼接文本，摘要截断避免超长
     summary_short = (summary or "")[:800].strip()
     text = f"标题：{title or ''}\n作者：{author or ''}\n摘要：{summary_short}"
-    result = _call_llm(LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, text)
+    result = _call_llm_classify(text)
     return result if result else "其他资讯"

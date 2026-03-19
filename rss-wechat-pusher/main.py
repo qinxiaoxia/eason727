@@ -305,32 +305,19 @@ def _has_chinese(text):
 
 
 def _translate_to_chinese(title):
-    """将纯英文标题翻译为中文"""
+    """将纯英文标题翻译为中文，支持多模型自动切换"""
     if not title or title in _translate_cache:
         return _translate_cache.get(title, title)
-    try:
-        from config import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
-    except ImportError:
+    from llm_utils import call_llm_with_fallback, get_llm_providers
+    if not get_llm_providers():
         return title
-    if not (LLM_API_KEY and LLM_BASE_URL and LLM_MODEL):
-        return title
-    url = LLM_BASE_URL.rstrip("/") + "/chat/completions"
-    headers = {"Authorization": f"Bearer {LLM_API_KEY}", "Content-Type": "application/json"}
-    prompt = f"将以下英文标题翻译成中文，只返回翻译结果，不要其他内容：\n{title}"
-    try:
-        r = requests.post(
-            url,
-            json={"model": LLM_MODEL, "messages": [{"role": "user", "content": prompt}], "max_tokens": 100, "temperature": 0},
-            headers=headers,
-            timeout=10,
-        )
-        r.raise_for_status()
-        result = (r.json().get("choices", [{}])[0].get("message", {}).get("content") or "").strip()
-        if result:
-            _translate_cache[title] = result
-            return result
-    except Exception:
-        pass
+    result = call_llm_with_fallback(
+        [{"role": "user", "content": f"将以下英文标题翻译成中文，只返回翻译结果，不要其他内容：\n{title}"}],
+        max_tokens=100,
+    )
+    if result:
+        _translate_cache[title] = result
+        return result
     return title
 
 
