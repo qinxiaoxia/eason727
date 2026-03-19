@@ -191,12 +191,13 @@ def get_author(entry):
 
 
 def fetch_feed(url):
-    """拉取 RSS"""
+    """拉取 RSS，用 requests 获取后解析（兼容 FreeBuf 等对 feedparser 直连不友好的源）"""
+    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (compatible; RSS-WeChat-Pusher/2.0)"
     try:
-        d = feedparser.parse(
-            url,
-            request_headers={"User-Agent": "RSS-WeChat-Pusher/2.0"},
-        )
+        r = requests.get(url, headers={"User-Agent": ua}, timeout=15)
+        r.raise_for_status()
+        r.encoding = r.apparent_encoding or "utf-8"
+        d = feedparser.parse(r.text)
         return d.entries if d.entries else []
     except Exception as e:
         print(f"拉取失败 {url}: {e}")
