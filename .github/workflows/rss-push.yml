@@ -21,6 +21,9 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 保证后续 git pull --rebase 正常（默认 depth=1 偶发 rebase 问题）
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -53,4 +56,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -f rss-wechat-pusher/rss_push.db 2>/dev/null || true
-          git diff --staged --quiet || (git commit -m "chore: update rss push state" && git push origin main)
+          if git diff --staged --quiet; then
+            echo "rss_push.db 无变化，跳过提交"
+            exit 0
+          fi
+          git commit -m "chore: update rss push state"
+          # 远端可能在此期间有新提交（你本地 push 等），先 rebase 再推避免 rejected
+          git pull --rebase origin main
+          git push origin main

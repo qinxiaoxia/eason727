@@ -25,4 +25,9 @@
 |------|------|------|
 | GITHUB_TOKEN | 是 | GitHub Personal Access Token，需 repo 权限 |
 | GITHUB_REPO | 否 | 仓库，默认 qinxiaoxia/eason727 |
-| INTERVAL_MINUTES | 否 | 触发间隔（分钟），默认 **180**（三小时）；需要更密可设 `60` 等 |
+| INTERVAL_MINUTES | 否 | 期望间隔（分钟），默认 **180** |
+| MIN_INTERVAL_MINUTES | 否 | **下限**（分钟），默认 **180**。若你在 Zeabur 里误设了 `INTERVAL_MINUTES=60`，代码仍会按最少 180 执行，避免 Actions 里出现「每小时 Manually run」 |
+
+**若 GitHub Actions 列表里几乎全是「Manually run by 你本人」且约每小时一次：**  
+那是 **本服务在用你的 PAT 调 `workflow_dispatch`**，不是仓库里的 `schedule`。  
+处理方式二选一：① **暂停/删除 Zeabur 上该服务**（只依赖 GitHub 定时即可）；② **重新部署** 本目录最新代码，让最短间隔生效为 180 分钟。

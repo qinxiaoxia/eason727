@@ -2,7 +2,10 @@
 """
 Zeabur 定时触发器：按间隔调用 GitHub API 触发 RSS Push workflow
 环境变量：GITHUB_TOKEN（必填）、GITHUB_REPO（默认 qinxiaoxia/eason727）
-INTERVAL_MINUTES（默认 180，即每 3 小时；可改为 60 等）
+INTERVAL_MINUTES（默认 180）。使用你的 PAT 触发时，Actions 上会显示「Manually run by 你的用户名」。
+
+注意：不要在仓库已配置 schedule 的情况下把间隔设成 60 分钟，否则会和 GitHub 定时叠加，
+且两台 job 同时 push rss_push.db 容易冲突。默认识别为至少 180 分钟。
 """
 
 import os
@@ -17,7 +20,18 @@ app = Flask(__name__)
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GITHUB_REPO = os.getenv("GITHUB_REPO", "qinxiaoxia/eason727")
 WORKFLOW_FILE = "rss-push.yml"
-INTERVAL_MINUTES = int(os.getenv("INTERVAL_MINUTES", "180"))
+
+# 请求间隔（环境变量），但不得低于 MIN_INTERVAL（避免「约 1 小时一次」叠在 schedule 上）
+_MIN = int(os.getenv("MIN_INTERVAL_MINUTES", "180"))
+_raw = int(os.getenv("INTERVAL_MINUTES", "180"))
+INTERVAL_MINUTES = max(_raw, _MIN)
+if INTERVAL_MINUTES != _raw:
+    print(
+        f"[Zeabur trigger] INTERVAL_MINUTES={_raw} 已调整为 {_MIN}（最少 {_MIN} 分钟），"
+        f"避免与 GitHub Actions schedule 重复触发。需要更短间隔可不再部署本服务、仅依赖 Actions；"
+        f"或设置 MIN_INTERVAL_MINUTES 降低下限（不推荐）。",
+        flush=True,
+    )
 
 
 def trigger_workflow():
