@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Zeabur 定时触发器：每 5 分钟调用 GitHub API 触发 RSS Push workflow
+Zeabur 定时触发器：按间隔调用 GitHub API 触发 RSS Push workflow
 环境变量：GITHUB_TOKEN（必填）、GITHUB_REPO（默认 qinxiaoxia/eason727）
+INTERVAL_MINUTES（默认 180，即每 3 小时；可改为 60 等）
 """
 
 import os
@@ -16,7 +17,7 @@ app = Flask(__name__)
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GITHUB_REPO = os.getenv("GITHUB_REPO", "qinxiaoxia/eason727")
 WORKFLOW_FILE = "rss-push.yml"
-INTERVAL_MINUTES = 5
+INTERVAL_MINUTES = int(os.getenv("INTERVAL_MINUTES", "180"))
 
 
 def trigger_workflow():
@@ -43,7 +44,7 @@ def trigger_workflow():
 
 @app.route("/")
 def index():
-    return "Zeabur RSS Push 触发器运行中，每 5 分钟触发一次 GitHub Actions"
+    return f"Zeabur RSS Push 触发器运行中，每 {INTERVAL_MINUTES} 分钟触发一次 GitHub Actions"
 
 
 @app.route("/health")
@@ -56,7 +57,7 @@ if __name__ == "__main__":
         print("警告: GITHUB_TOKEN 未设置，将不会触发 workflow")
 
     scheduler = BackgroundScheduler()
-    scheduler.add_job(trigger_workflow, "interval", minutes=INTERVAL_MINUTES)
+    scheduler.add_job(trigger_workflow, "interval", minutes=max(1, INTERVAL_MINUTES))
     scheduler.start()
     # 启动后立即触发一次
     trigger_workflow()

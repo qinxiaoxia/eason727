@@ -86,10 +86,18 @@ def get_llm_providers() -> List[Tuple[str, str, str]]:
     return []
 
 
-def call_llm_with_fallback(messages: list, max_tokens: int = 20) -> Optional[str]:
+def call_llm_with_fallback(
+    messages: list,
+    max_tokens: int = 20,
+    system: Optional[str] = None,
+) -> Optional[str]:
     """
     按顺序尝试各模型，直到有一个成功。失败（额度用尽、超时等）则换下一个。
+    system：可选系统提示，会插入为第一条 message（适用于翻译等需统一约束的场景）。
     """
+    msgs: List[dict] = list(messages)
+    if system:
+        msgs = [{"role": "system", "content": system}] + msgs
     providers = get_llm_providers()
     for api_key, base_url, model in providers:
         try:
@@ -97,7 +105,7 @@ def call_llm_with_fallback(messages: list, max_tokens: int = 20) -> Optional[str
             headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
             payload = {
                 "model": model,
-                "messages": messages,
+                "messages": msgs,
                 "max_tokens": max_tokens,
                 "temperature": 0,
             }

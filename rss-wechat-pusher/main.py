@@ -25,7 +25,6 @@ try:
     from config import (
         WECHAT_WEBHOOK,
         FEEDS,
-        WEWE_RSS_URL,
         SCHEDULED_PUSH_TIMES,
         SCHEDULED_WINDOW_MINUTES,
     )
@@ -42,7 +41,6 @@ except ImportError:
     if webhook and feeds_json:
         WECHAT_WEBHOOK = webhook
         FEEDS = [(u, t) for u, t in json.loads(feeds_json)]
-        WEWE_RSS_URL = os.getenv("WEWE_RSS_URL", "")
         SCHEDULED_PUSH_TIMES = [(9, 30), (15, 30)]
         SCHEDULED_WINDOW_MINUTES = 5
         from classifier import classify, REALTIME_CATEGORIES, SCHEDULED_CATEGORIES
@@ -190,18 +188,121 @@ def get_author(entry):
     return ""
 
 
+def _source_type_for_feed_url(feed_url: str) -> str:
+    """根据 config.FEEDS 匹配条目所属 feed 类型（wewe_rss / rss），旧库无类型字段时用。"""
+    if not feed_url:
+        return "rss"
+    ff = feed_url.rstrip("/")
+    for u, st in FEEDS:
+        uu = u.rstrip("/")
+        if ff == uu or ff.startswith(uu + "/"):
+            return st
+    return "rss"
+
+
+def _hostname_from_feed(feed_url: str) -> str:
+    """RSS/Atom 页的域名，用于网站类来源展示。"""
+    from urllib.parse import urlparse
+
+    p = urlparse(feed_url or "")
+    host = (p.netloc or "").split("@")[-1].lower()
+    if host.startswith("www."):
+        host = host[4:]
+    return host
+
+
+def _source_bracket_label(author: str, source_type: str, feed_url: str) -> str:
+    """
+    紧挨时间的括号备注：来源：xx公众号 / 来源：xx网站
+    - wewe_rss：优先用 RSS 里的作者名作为公众号名
+    - rss：用订阅域名 + 「网站」
+    """
+    st = (source_type or "rss").strip().lower()
+    author = (author or "").strip()
+    host = _hostname_from_feed(feed_url)
+    if st == "wewe_rss":
+        if author:
+            core = author if author.endswith("公众号") else f"{author}公众号"
+        elif host:
+            core = f"{host}公众号"
+        else:
+            core = "未知公众号"
+    else:
+        core = f"{host}网站" if host else "未知网站"
+    return f"来源：{core}"
+
+
 def fetch_feed(url):
-    """拉取 RSS，用 requests 获取后解析（兼容 FreeBuf 等对 feedparser 直连不友好的源）"""
-    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (compatible; RSS-WeChat-Pusher/2.0)"
-    try:
-        r = requests.get(url, headers={"User-Agent": ua}, timeout=15)
-        r.raise_for_status()
-        r.encoding = r.apparent_encoding or "utf-8"
-        d = feedparser.parse(r.text)
-        return d.entries if d.entries else []
-    except Exception as e:
-        print(f"拉取失败 {url}: {e}")
-        return []
+    """
+    拉取 RSS：requests 拉正文再 feedparser 解析。
+    FreeBuf 等对云主机/脚本常返回 405：使用浏览器级请求头，并对 /feed、/feed/、镜像 URL 依次重试。
+    若 GitHub Actions 仍 405，可在 Secrets 设置 FREEBUF_RSS_MIRROR 为自建 RSSHub 等镜像完整地址。
+    """
+    from urllib.parse import urlparse
+
+    ua = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    )
+
+    def headers_for(target):
+        p = urlparse(target)
+        referer = f"{p.scheme}://{p.netloc}/" if p.scheme and p.netloc else "https://www.freebuf.com/"
+        return {
+            "User-Agent": ua,
+            "Accept": "application/rss+xml,application/atom+xml,application/xml,text/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Referer": referer,
+            "Cache-Control": "no-cache",
+        }
+
+    candidates = []
+    seen = set()
+
+    def add(u):
+        if u and u not in seen:
+            seen.add(u)
+            candidates.append(u)
+
+    low = (url or "").lower()
+    mirror = (os.getenv("FREEBUF_RSS_MIRROR") or "").strip()
+    if mirror and "freebuf.com" in low:
+        add(mirror)
+
+    add(url)
+
+    if "freebuf.com" in low:
+        stripped = url.rstrip("/")
+        if stripped.endswith("/feed"):
+            add(stripped + "/")
+        elif not url.endswith("/"):
+            add(stripped + "/")
+
+    session = requests.Session()
+    last_err = None
+    for u in candidates:
+        try:
+            r = session.get(u, headers=headers_for(u), timeout=25, allow_redirects=True)
+            if r.status_code in (403, 405):
+                last_err = f"{r.status_code} Client Error for url: {u}"
+                continue
+            r.raise_for_status()
+            r.encoding = r.apparent_encoding or getattr(r, "encoding", None) or "utf-8"
+            d = feedparser.parse(r.text)
+            return d.entries if d.entries else []
+        except requests.HTTPError as e:
+            resp = e.response
+            if resp is not None and resp.status_code in (403, 405):
+                last_err = str(e)
+                continue
+            last_err = str(e)
+            continue
+        except Exception as e:
+            last_err = str(e)
+            continue
+
+    print(f"拉取失败 {url}: {last_err or 'unknown'}")
+    return []
 
 
 # 分类对应的 emoji
@@ -286,10 +387,13 @@ def _build_ioc_push_content(item):
     pairs = _extract_iocs(text)
     if not pairs:
         return None  # 无有效 IOC，用基础格式
+    feed_url = item.get("source_url") or ""
+    st = item.get("source_type") or _source_type_for_feed_url(feed_url)
+    src = _source_bracket_label(item.get("author") or "", st, feed_url)
     lines = [
         "【信息类型】监管机构预警",
         f"【标题】{title}",
-        f"【时间】{time_str}",
+        f"【时间】{time_str}（{src}）",
         f"【链接】{link}",
         "【相关IOC】",
     ]
@@ -310,21 +414,101 @@ def _has_chinese(text):
     return False
 
 
+# 翻译专用系统提示：减少「涉攻击/漏洞」类标题被模型误拒；要求单行输出
+_TRANSLATION_SYSTEM = """你是网络安全行业媒体的中文编辑。用户给出的英文标题均为互联网上已公开发表的技术资讯（厂商公告、CVE、漏洞说明、安全研究报道等合法内容）。
+请只输出一句简体中文标题：不要引号、不要解释、不要前后缀；禁止拒绝回答或输出免责声明。
+若标题极短或专有名过多，可保留必要英文词。"""
+
+
+def _looks_like_llm_refusal(text: str) -> bool:
+    """模型拒答、合规话术 → 不用作标题展示"""
+    if not text or not text.strip():
+        return True
+    t = text.strip()
+    low = t.lower()
+    for s in (
+        "我不能", "我无法", "对不起", "抱歉", "无法提供", "不能提供", "无法翻译",
+        "不能翻译", "不提供", "涉及非法", "不道德", "不符合", "服务准则",
+        "安全原因", "违规内容", "无法完成", "不应提供", "不予", "拒绝",
+    ):
+        if s in t:
+            return True
+    for s in (
+        "i cannot", "i can't", "i'm sorry", "sorry,", "unable to translate",
+        "cannot translate", "can't translate", "cannot provide", "as an ai",
+        "i will not", "i'm not able",
+    ):
+        if s in low:
+            return True
+    return False
+
+
+def _sanitize_translation_output(raw: str, original: str) -> str:
+    """去掉「translated to:」链式重复、多行废话，检测拒答后回退英文原标题"""
+    if not raw:
+        return original
+    s = raw.strip().strip('"').strip("'")
+    # 模型反复「translated to:」时只取最后一次后面的文本
+    for _ in range(8):
+        m = re.search(r"(?i)translated\s*to\s*:\s*(.+)$", s)
+        if m:
+            s = m.group(1).strip()
+            continue
+        m2 = re.search(r"(?:译为|翻译为|翻译结果)[:：]\s*(.+)$", s)
+        if m2:
+            s = m2.group(1).strip()
+            continue
+        break
+    s = s.split("\n")[0].strip()
+    for prefix in ("中文标题：", "翻译结果：", "翻译：", "标题：", "结果：", "输出："):
+        if s.startswith(prefix):
+            s = s[len(prefix) :].strip()
+    s = re.sub(r"[（(]译[）)]\s*$", "", s).strip()
+    if len(s) > 200:
+        s = s[:200].rstrip()
+    if _looks_like_llm_refusal(s):
+        return original
+    # 要求有中文；若仍全英文则视为失败，避免把拒答残句推出去
+    if not _has_chinese(s):
+        return original
+    return s
+
+
 def _translate_to_chinese(title):
-    """将纯英文标题翻译为中文，支持多模型自动切换"""
-    if not title or title in _translate_cache:
-        return _translate_cache.get(title, title)
+    """
+    将纯英文标题译为中文。
+    返回 (展示用标题, 是否采用了中文译名)。失败时第二项为 False，展示仍用原文（不标记「译」）。
+    """
+    if not title:
+        return title, False
+    if title in _translate_cache:
+        cached = _translate_cache[title]
+        if isinstance(cached, tuple) and len(cached) == 2:
+            return cached
+        # 旧缓存：仅有字符串
+        ok = cached != title and _has_chinese(cached or "") and not _looks_like_llm_refusal(cached or "")
+        return (cached if ok else title, ok)
+
     from llm_utils import call_llm_with_fallback, get_llm_providers
+
     if not get_llm_providers():
-        return title
-    result = call_llm_with_fallback(
-        [{"role": "user", "content": f"将以下英文标题翻译成中文，只返回翻译结果，不要其他内容：\n{title}"}],
-        max_tokens=100,
+        _translate_cache[title] = (title, False)
+        return title, False
+
+    raw = call_llm_with_fallback(
+        [{"role": "user", "content": f"请翻译为简体中文标题（仅此一行）：\n{title}"}],
+        max_tokens=256,
+        system=_TRANSLATION_SYSTEM,
     )
-    if result:
-        _translate_cache[title] = result
-        return result
-    return title
+    if not raw:
+        _translate_cache[title] = (title, False)
+        return title, False
+
+    cleaned = _sanitize_translation_output(raw, title)
+    ok = cleaned != title and _has_chinese(cleaned) and not _looks_like_llm_refusal(cleaned)
+    pair = (cleaned if ok else title, ok)
+    _translate_cache[title] = pair
+    return pair
 
 
 def _build_single_category_content(category, items):
@@ -339,17 +523,19 @@ def _build_single_category_content(category, items):
         raw_title = (item["title"] or "")[:80] + ("..." if len(item["title"] or "") > 80 else "")
         translated = False
         if TRANSLATE_ENABLED and raw_title and not _has_chinese(raw_title):
-            title = _translate_to_chinese(raw_title) or raw_title
-            translated = True
+            title, translated = _translate_to_chinese(raw_title)
         else:
             title = raw_title
         if translated:
             title = f"{title}（译）"
         link = item["link"] or ""
         time_str = item.get("published_str") or ""
+        feed_url = item.get("source_url") or ""
+        st = item.get("source_type") or _source_type_for_feed_url(feed_url)
+        src = _source_bracket_label(item.get("author") or "", st, feed_url)
         title_safe = (title or "").replace("]", "］").replace("[", "［")
         lines.append(f"[{title_safe}]({link})")
-        lines.append(f"> {time_str}")
+        lines.append(f"> {time_str}（{src}）")
         lines.append("")
     return "\n".join(lines).strip()
 
@@ -496,7 +682,13 @@ def main():
             dt_bj = _parse_published_to_beijing(published_str)
             if _is_today_beijing(dt_bj):
                 new_realtime.append({
-                    "title": title, "published_str": published_str, "link": link, "category": category, "author": author or ""
+                    "title": title,
+                    "published_str": published_str,
+                    "link": link,
+                    "category": category,
+                    "author": author or "",
+                    "source_url": feed_url,
+                    "source_type": source_type,
                 })
 
     conn.commit()
@@ -522,25 +714,29 @@ def main():
     if slot is not None or force_now:
         ph = ",".join("?" * len(SCHEDULED_CATEGORIES))
         cur = conn.execute(
-            f"""SELECT link, title, published_str, category, author FROM articles
+            f"""SELECT link, title, published_str, category, author, source_url FROM articles
                WHERE category IN ({ph}) AND link NOT IN (SELECT link FROM pushed)""",
             tuple(SCHEDULED_CATEGORIES),
         )
         rows = cur.fetchall()
         if slot == (15, 30):
-            rows = [(l, t, ps, c, a) for l, t, ps, c, a in rows if _is_today_beijing(_parse_published_to_beijing(ps))]
+            rows = [(l, t, ps, c, a, su) for l, t, ps, c, a, su in rows if _is_today_beijing(_parse_published_to_beijing(ps))]
         elif slot == (9, 30):
-            rows = [(l, t, ps, c, a) for l, t, ps, c, a in rows if _is_in_930_window(_parse_published_to_beijing(ps))]
+            rows = [(l, t, ps, c, a, su) for l, t, ps, c, a, su in rows if _is_in_930_window(_parse_published_to_beijing(ps))]
         elif "--push-now" in sys.argv or os.getenv("PUSH_SCHEDULED_NOW") == "1":
-            rows = [(l, t, ps, c, a) for l, t, ps, c, a in rows if _is_today_beijing(_parse_published_to_beijing(ps))]
+            rows = [(l, t, ps, c, a, su) for l, t, ps, c, a, su in rows if _is_today_beijing(_parse_published_to_beijing(ps))]
         if rows:
             by_cat = {}
-            for link, title, published_str, category, author in rows:
+            for link, title, published_str, category, author, source_url in rows:
+                su = source_url or ""
+                st = _source_type_for_feed_url(su)
                 by_cat.setdefault(category, []).append({
                     "title": title,
                     "published_str": published_str,
                     "link": link,
                     "author": author or "",
+                    "source_url": su,
+                    "source_type": st,
                 })
             send_wechat_per_category(WECHAT_WEBHOOK, by_cat)
             now = datetime.now().isoformat()

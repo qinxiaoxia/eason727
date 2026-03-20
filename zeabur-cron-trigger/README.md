@@ -1,6 +1,6 @@
 # Zeabur RSS Push 定时触发器
 
-每 5 分钟调用 GitHub API 触发 `repository_dispatch`，启动 RSS Push workflow。
+默认每 **3 小时**（`INTERVAL_MINUTES=180`）调用 GitHub API 触发 **workflow_dispatch**，启动 RSS Push workflow。
 
 ## 部署到 Zeabur（推荐：独立仓库）
 
@@ -25,3 +25,4 @@
 |------|------|------|
 | GITHUB_TOKEN | 是 | GitHub Personal Access Token，需 repo 权限 |
 | GITHUB_REPO | 否 | 仓库，默认 qinxiaoxia/eason727 |
+| INTERVAL_MINUTES | 否 | 触发间隔（分钟），默认 **180**（三小时）；需要更密可设 `60` 等 |

@@ -21,7 +21,7 @@ FEEDS = (
         ("https://www.helpnetsecurity.com/feed/", "rss"),
         ("http://hackernews.cc/feed", "rss"),
         ("https://api.anquanke.com/data/v1/rss", "rss"),
-        ("https://www.freebuf.com/feed", "rss"),
+        ("https://www.freebuf.com/feed/", "rss"),
     ]
 )
 
@@ -39,4 +39,5 @@ LLM_BASE_URL = os.getenv("LLM_BASE_URL") or "https://api.deepseek.com/v1"
 LLM_MODEL = os.getenv("LLM_MODEL") or "deepseek-chat"
 
 # 纯英文标题自动翻译为中文（需配置 LLM）
+# 勿使用「数学专用」等不适配 NLP 的模型名做翻译，易拒答或重复输出
 TRANSLATE_ENABLED = True
