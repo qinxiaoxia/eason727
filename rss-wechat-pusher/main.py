@@ -757,33 +757,27 @@ def main():
 
 
 def test_llm():
-    """测试 LLM API 是否可用"""
+    """测试 LLM API 是否可用（与分类相同：多模型则按顺序尝试）"""
     try:
-        from config import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
+        from llm_utils import call_llm_with_fallback, get_llm_providers
     except ImportError:
-        print("无法加载 config，请检查 config.py")
+        print("无法加载 llm_utils")
         return
-    if not LLM_API_KEY:
-        print("LLM_API_KEY 未配置，请在 config.py 中填写")
+    providers = get_llm_providers()
+    if not providers:
+        print("未配置 LLM：需要 LLM_API_KEY + LLM_BASE_URL，以及 LLM_MODEL 或 LLM_MODELS / LLM_MODELS_JSON")
         return
-    print(f"测试 LLM 连接: {LLM_BASE_URL} / {LLM_MODEL}")
-    url = LLM_BASE_URL.rstrip("/") + "/chat/completions"
-    payload = {
-        "model": LLM_MODEL,
-        "messages": [{"role": "user", "content": "回复：测试成功"}],
-        "max_tokens": 20,
-    }
+    names = [p[2] for p in providers]
+    print(f"测试 LLM 连接（按顺序最多 {len(providers)} 个）: {names}")
     try:
-        r = requests.post(
-            url,
-            json=payload,
-            headers={"Authorization": f"Bearer {LLM_API_KEY}", "Content-Type": "application/json"},
-            timeout=15,
+        content = call_llm_with_fallback(
+            [{"role": "user", "content": "只回复：测试成功"}],
+            max_tokens=20,
         )
-        r.raise_for_status()
-        data = r.json()
-        content = (data.get("choices", [{}])[0].get("message", {}).get("content") or "").strip()
-        print(f"✓ 成功！API 返回: {content[:50]}...")
+        if content:
+            print(f"✓ 成功！API 返回: {content[:80]}...")
+        else:
+            print("✗ 全部模型均未返回内容")
     except requests.exceptions.HTTPError as e:
         print(f"✗ HTTP 错误: {e}")
         if e.response is not None:

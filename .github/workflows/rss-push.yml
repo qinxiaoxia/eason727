@@ -3,7 +3,7 @@
 # - 实时推送：监管机构预警、重大安全事件 → 立即推送
 # - 定时推送：每天 9:30、15:30（北京）→ 截至当前时间所有未推送的非实时类文章，按类别合并
 # - 推送后标记已推送，避免重复
-# Secrets: WECHAT_WEBHOOK, FEEDS_JSON (必填) | LLM_API_KEY, LLM_BASE_URL, LLM_MODEL (可选)
+# Secrets: WECHAT_WEBHOOK, FEEDS_JSON (必填) | LLM_API_KEY, LLM_BASE_URL, LLM_MODELS_JSON 或 LLM_MODEL (可选)
 name: RSS Push
 
 on:

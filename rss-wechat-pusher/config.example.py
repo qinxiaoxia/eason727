@@ -31,12 +31,24 @@ SCHEDULED_PUSH_TIMES = [(9, 30), (15, 30)]
 # 推送时间窗口（分钟），即 9:28-9:32 或 15:28-15:32 内运行才视为定时推送（收紧避免误触发）
 SCHEDULED_WINDOW_MINUTES = 2
 
-# 大模型分类（Phase 2）：规则未命中时调用 LLM 细分类
-# LLM_API_KEY 留空则全部归为「其他资讯」
-# 支持 OpenAI 兼容 API：DeepSeek、通义千问、智谱、OpenAI 等
+# 大模型分类 / 翻译：规则未命中时调用 LLM；LLM_API_KEY 留空则全部归为「其他资讯」
+# 支持 OpenAI 兼容 API：DashScope、DeepSeek、智谱等
 LLM_API_KEY = os.getenv("LLM_API_KEY") or ""
 LLM_BASE_URL = os.getenv("LLM_BASE_URL") or "https://api.deepseek.com/v1"
+# 单模型（当下方 LLM_MODELS 为空且未设置 LLM_MODELS_JSON 时使用）
 LLM_MODEL = os.getenv("LLM_MODEL") or "deepseek-chat"
+
+# 多模型回退：同一 KEY + BASE_URL 下按顺序尝试，前一个失败/无内容则换下一个
+# GitHub Actions：新增 Secret「LLM_MODELS_JSON」，一行 JSON，例如：
+# ["qwen-plus","qwen1.5-110b-chat","deepseek-r1-distill-qwen-7b","qwen3-32b"]
+_llm_models_json = os.getenv("LLM_MODELS_JSON")
+try:
+    LLM_MODELS = json.loads(_llm_models_json) if _llm_models_json else []
+except json.JSONDecodeError:
+    LLM_MODELS = []
+if not LLM_MODELS:
+    # 本地可复制本列表；需与 LLM_BASE_URL 为同一平台（如均为 DashScope compatible-mode）
+    LLM_MODELS = []
 
 # 纯英文标题自动翻译为中文（需配置 LLM）
 # 勿使用「数学专用」等不适配 NLP 的模型名做翻译，易拒答或重复输出
