@@ -1,16 +1,17 @@
 # RSS 推送到企业微信
 # 部署说明：
-# - 实时推送：监管机构预警、重大安全事件 → 立即推送
-# - 定时推送：每天 9:30、15:30（北京）→ 截至当前时间所有未推送的非实时类文章，按类别合并
+# - 轮巡（北京 6:00–18:00 每两小时，20:00–次日 6:00 静默）：实时两类 → 仅非静默时段运行中推送
+# - 定时（北京 9:30、15:30）：漏洞信息等其余四类 → 仅在此类运行中汇总推送
 # - 推送后标记已推送，避免重复
 # Secrets: WECHAT_WEBHOOK, FEEDS_JSON (必填) | LLM_API_KEY, LLM_BASE_URL, LLM_MODELS_JSON 或 LLM_MODEL (可选)
 name: RSS Push
 
 on:
   schedule:
-    # 双线 cron：① 每 3 小时一轮（0,3,6… UTC 的 :30）② 额外对齐 1/7/13/19 UTC 的 :30（含北京早 9:30、午 15:30）
-    - cron: "30 */3 * * *"
-    - cron: "30 1,7,13,19 * * *"
+    # 轮巡：北京 6:00–18:00 每两小时整点 → UTC 22,0,2,4,6,8,10（不含 20:00 北京整点）
+    - cron: "0 22,0,2,4,6,8,10 * * *"
+    # 定时：北京 9:30、15:30 → UTC 1:30、7:30（仅四类）
+    - cron: "30 1,7 * * *"
   workflow_dispatch:
   repository_dispatch:   # 外部定时服务可调用 API 触发，作为 schedule 不生效时的备用
 
@@ -44,7 +45,7 @@ jobs:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
           LLM_MODEL: ${{ secrets.LLM_MODEL }}
-          # 所有触发方式统一：定时类仅在 9:30/15:30 推送；手动触发与 cron/Zeabur 行为一致
+          # 可选：RSS_PUSH_MODE=poll|scheduled 强制本轮只跑轮巡或只跑定时；留空则按北京时间自动判断
           PUSH_SCHEDULED_NOW: ""
         run: |
           cd rss-wechat-pusher

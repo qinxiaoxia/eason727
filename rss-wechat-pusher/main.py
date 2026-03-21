@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
 RSS 推送到企业微信机器人
-- 6 类：监管机构预警、漏洞信息、重大安全事件、网安新闻资讯、网安赛事资讯、其他资讯
-- 1）实时：监管机构预警、重大安全事件→仅推送当天（去重）
-- 2）15:30 北京：全部 6 类→仅推送当天
-- 3）9:30 北京：全部 6 类→仅推送前一天 15:30 至当天 9:30
-- 4）国家网络安全通报中心+重点防范：有 IOC 用特殊格式，无则按 1
+- 静默：北京每天 20:00–次日 6:00 不推送（实时与定时均不推，拉取入库照常）
+- 实时两类（监管预警、重大事件）：6:00–20:00 内轮巡（约每 2 小时，可接受延迟）；夜间发布的在次日 6:00 后非静默时段补推
+- 定时四类：9:30 档用「昨 15:30～今 9:30」时间窗（覆盖静默造成的缺口）；15:30 档与手动 --push-now 仅「今天」稿（北京日期）
+- 去重：已写入 pushed 的链接不再推送
+- 全量：`--push-all-now`；临时含昨天：`--push-now --with-yesterday`
 """
 
 import os
@@ -27,11 +27,13 @@ try:
         FEEDS,
         SCHEDULED_PUSH_TIMES,
         SCHEDULED_WINDOW_MINUTES,
+        POLL_HOURS_BEIJING,
+        POLL_WINDOW_MINUTES,
     )
     from classifier import (
         classify,
         REALTIME_CATEGORIES,
-        SCHEDULED_CATEGORIES,
+        TIMED_PUSH_CATEGORIES,
     )
 except ImportError:
     import json
@@ -43,7 +45,9 @@ except ImportError:
         FEEDS = [(u, t) for u, t in json.loads(feeds_json)]
         SCHEDULED_PUSH_TIMES = [(9, 30), (15, 30)]
         SCHEDULED_WINDOW_MINUTES = 5
-        from classifier import classify, REALTIME_CATEGORIES, SCHEDULED_CATEGORIES
+        POLL_HOURS_BEIJING = (6, 8, 10, 12, 14, 16, 18)
+        POLL_WINDOW_MINUTES = 5
+        from classifier import classify, REALTIME_CATEGORIES, TIMED_PUSH_CATEGORIES
     else:
         print("请复制 config.example.py 为 config.py 并填写配置")
         sys.exit(1)
@@ -119,6 +123,85 @@ def _is_today_beijing(dt):
         return False
 
 
+def _is_yesterday_beijing(dt):
+    """是否北京时间的昨天（按日历日）"""
+    if not dt:
+        return False
+    try:
+        from zoneinfo import ZoneInfo
+        now = datetime.now(ZoneInfo("Asia/Shanghai"))
+        return dt.date() == (now.date() - timedelta(days=1))
+    except ImportError:
+        return False
+
+
+def _is_today_or_yesterday_beijing(dt):
+    return _is_today_beijing(dt) or _is_yesterday_beijing(dt)
+
+
+def _now_beijing():
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("Asia/Shanghai"))
+    except ImportError:
+        return datetime.now()
+
+
+def _is_quiet_hours_beijing_now():
+    """北京 20:00–次日 6:00 为静默时段，不执行任何推送。"""
+    now = _now_beijing()
+    h = now.hour
+    return h >= 20 or h < 6
+
+
+def _is_publish_time_in_quiet_hours(dt):
+    """文章发布时间是否落在 20:00–次日 6:00（北京，不含 6:00 整）。"""
+    if not dt:
+        return False
+    total_m = dt.hour * 60 + dt.minute
+    if total_m >= 20 * 60:
+        return True
+    if total_m < 6 * 60:
+        return True
+    return False
+
+
+def _realtime_should_queue_for_push(dt):
+    """是否把实时两类加入待推送队列（入库后候选，最终以 eligibility 为准）。"""
+    if not dt:
+        return False
+    if _is_publish_time_in_quiet_hours(dt):
+        return True
+    if _is_today_beijing(dt):
+        return True
+    if _is_yesterday_beijing(dt):
+        return True
+    return False
+
+
+def _realtime_article_eligible_now(dt, now_bj):
+    """
+    当前时刻是否允许推送该实时稿（须非静默时段）。
+    - 夜间发布：次日 6:00～当日 19:59 之间的非静默轮巡可推
+    - 日间 6:00–20:00 发布：仅今天或昨天稿（补昨天白天遗留）
+    """
+    if not dt:
+        return False
+    if _is_quiet_hours_beijing_now():
+        return False
+    if _is_publish_time_in_quiet_hours(dt):
+        if now_bj.date() > dt.date():
+            return 6 <= now_bj.hour < 20
+        if now_bj.date() == dt.date():
+            return now_bj.hour >= 6 and now_bj.hour < 20
+        return False
+    if _is_today_beijing(dt):
+        return True
+    if _is_yesterday_beijing(dt):
+        return True
+    return False
+
+
 def _is_in_930_window(dt):
     """是否在前一天 15:30 至当天 9:30 之间（北京）"""
     if not dt:
@@ -135,7 +218,7 @@ def _is_in_930_window(dt):
 
 
 def _get_scheduled_slot():
-    """当前若在定时窗口内，返回 (9,30) 或 (15,30)，否则 None"""
+    """当前若在定时窗口内，返回 config 中某一档 (h,m)，否则 None"""
     try:
         from zoneinfo import ZoneInfo
         tz = ZoneInfo("Asia/Shanghai")
@@ -148,6 +231,71 @@ def _get_scheduled_slot():
         if start <= now <= end:
             return (h, m)
     return None
+
+
+def _is_polling_slot_beijing():
+    """当前是否在北京轮巡窗口内（整点 ± POLL_WINDOW_MINUTES，小时见 POLL_HOURS_BEIJING）"""
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo("Asia/Shanghai")
+        now = datetime.now(tz)
+    except ImportError:
+        now = datetime.now()
+    if now.hour not in POLL_HOURS_BEIJING:
+        return False
+    return now.minute <= POLL_WINDOW_MINUTES + 1
+
+
+def _get_run_mode():
+    """
+    poll: 轮巡，仅推送实时两类
+    scheduled: 定时，仅推送其余四类
+    None: 不在窗口，仅拉取入库不推送
+    环境变量 RSS_PUSH_MODE=poll 强制轮巡；scheduled 与 --push-now 在 main 中单独处理
+    """
+    ov = os.getenv("RSS_PUSH_MODE", "").strip().lower()
+    if ov in ("poll", "polling"):
+        return "poll"
+    if _get_scheduled_slot():
+        return "scheduled"
+    if _is_polling_slot_beijing():
+        return "poll"
+    return None
+
+
+def _collect_realtime_to_push(conn, new_realtime, include_db_backlog):
+    """
+    本轮待推送的实时两类。
+    include_db_backlog=False：仅本 run 新入库的 new_realtime（与轮巡行为一致）。
+    include_db_backlog=True：合并库内当日仍未推送的实时类（用于 --push-all-now）。
+    """
+    if not include_db_backlog:
+        return list(new_realtime)
+    by_link = {item["link"]: item for item in new_realtime}
+    ph = ",".join("?" * len(REALTIME_CATEGORIES))
+    cur = conn.execute(
+        f"""SELECT link, title, published_str, category, author, source_url FROM articles
+           WHERE category IN ({ph}) AND link NOT IN (SELECT link FROM pushed)""",
+        tuple(REALTIME_CATEGORIES),
+    )
+    for link, title, ps, cat, author, su in cur.fetchall():
+        if link in by_link:
+            continue
+        dt_bj = _parse_published_to_beijing(ps)
+        if not _realtime_should_queue_for_push(dt_bj):
+            continue
+        su = su or ""
+        st = _source_type_for_feed_url(su)
+        by_link[link] = {
+            "title": title,
+            "published_str": ps,
+            "link": link,
+            "category": cat,
+            "author": author or "",
+            "source_url": su,
+            "source_type": st,
+        }
+    return list(by_link.values())
 
 
 def parse_date(entry):
@@ -381,6 +529,14 @@ def _extract_iocs(text):
 def _build_ioc_push_content(item):
     """构建「重点防范」类文章的特殊格式（含 IOC）。若无有效 IOC 则返回 None，改用基础格式。"""
     title = item.get("title") or ""
+    try:
+        from config import TRANSLATE_ENABLED
+    except ImportError:
+        TRANSLATE_ENABLED = True
+    if TRANSLATE_ENABLED and title and _should_translate_title(title):
+        t2, ok = _translate_to_chinese(title[:200])
+        if ok:
+            title = f"{t2}（译）"
     link = item.get("link") or ""
     time_str = item.get("published_str") or ""
     text = _fetch_article_text(link)
@@ -411,6 +567,27 @@ def _has_chinese(text):
     for c in text:
         if "\u4e00" <= c <= "\u9fff":
             return True
+    return False
+
+
+def _should_translate_title(title: str) -> bool:
+    """
+    是否需要将标题译为中文（用于推送展示）。
+    - 无中文（CJK 统一表意区）：译
+    - 中英混合：英文字母数明显多于汉字时仍译（避免「短英文前缀+少量汉字」被误判为已中文化）
+    """
+    if not title or not str(title).strip():
+        return False
+    t = str(title).strip()
+    if not _has_chinese(t):
+        return True
+    cn = sum(1 for c in t if "\u4e00" <= c <= "\u9fff")
+    latin = sum(1 for c in t if "a" <= c <= "z" or "A" <= c <= "Z")
+    # 原阈值 latin>=6 过严：如 "RCE风险" "AI安全周报" 会整句不译
+    if latin >= 3 and latin >= cn * 1.05:
+        return True
+    if latin >= cn * 1.5:
+        return True
     return False
 
 
@@ -474,6 +651,24 @@ def _sanitize_translation_output(raw: str, original: str) -> str:
     return s
 
 
+def _translate_title_for_display(full_title: str, max_in: int = 500, max_out: int = 200):
+    """
+    用完整标题（限长）调用翻译，避免只取前 80 字导致中英比例失真或截断在词中间。
+    返回 (展示用标题, 是否译成功)。失败时退回与原先一致的 80 字截断展示。
+    """
+    full_title = (full_title or "").strip()
+    if not full_title:
+        return "", False
+    tin = full_title[:max_in]
+    t, ok = _translate_to_chinese(tin)
+    if ok:
+        if len(t) > max_out:
+            t = t[: max_out - 1].rstrip() + "…"
+        return t, True
+    short = full_title[:80] + ("..." if len(full_title) > 80 else "")
+    return short, False
+
+
 def _translate_to_chinese(title):
     """
     将纯英文标题译为中文。
@@ -516,14 +711,16 @@ def _build_single_category_content(category, items):
     try:
         from config import TRANSLATE_ENABLED
     except ImportError:
-        TRANSLATE_ENABLED = False
+        TRANSLATE_ENABLED = True
     emoji = CATEGORY_STYLE.get(category, "📌")
     lines = [f"### {emoji} {category}", ""]
     for item in items:
-        raw_title = (item["title"] or "")[:80] + ("..." if len(item["title"] or "") > 80 else "")
+        full = (item.get("title") or "").strip()
+        raw_title = full[:80] + ("..." if len(full) > 80 else "")
         translated = False
-        if TRANSLATE_ENABLED and raw_title and not _has_chinese(raw_title):
-            title, translated = _translate_to_chinese(raw_title)
+        # 用完整标题判断是否该译、并送入模型（避免 80 字截断误判「已有中文」或漏译后半段英文）
+        if TRANSLATE_ENABLED and full and _should_translate_title(full):
+            title, translated = _translate_title_for_display(full)
         else:
             title = raw_title
         if translated:
@@ -680,7 +877,7 @@ def main():
         # 监管预警、重大事件→实时推送（公众号+网站均支持，以分类为准）
         if category in REALTIME_CATEGORIES and link not in pushed:
             dt_bj = _parse_published_to_beijing(published_str)
-            if _is_today_beijing(dt_bj):
+            if _realtime_should_queue_for_push(dt_bj):
                 new_realtime.append({
                     "title": title,
                     "published_str": published_str,
@@ -693,37 +890,76 @@ def main():
 
     conn.commit()
 
-    # 2. 实时推送（每个类型一条消息）
-    if new_realtime:
-        by_cat = {}
-        for item in new_realtime:
-            by_cat.setdefault(item["category"], []).append(item)
-        send_wechat_per_category(WECHAT_WEBHOOK, by_cat)
-        for item in new_realtime:
-            conn.execute(
-                "INSERT OR IGNORE INTO pushed (link, pushed_at, push_type) VALUES (?, ?, ?)",
-                (item["link"], datetime.now().isoformat(), "realtime"),
-            )
-        conn.commit()
-        print(f"实时推送 {len(new_realtime)} 条")
+    force_push_all = "--push-all-now" in sys.argv or os.getenv("PUSH_ALL_NOW") == "1"
+    include_yesterday = "--with-yesterday" in sys.argv or os.getenv("SCHEDULED_INCLUDE_YESTERDAY") == "1"
+    force_timed_digest = (
+        force_push_all
+        or "--push-now" in sys.argv
+        or os.getenv("PUSH_SCHEDULED_NOW") == "1"
+        or os.getenv("RSS_PUSH_MODE", "").strip().lower() in ("scheduled", "timed")
+    )
+    if force_timed_digest and not force_push_all:
+        mode = "scheduled"
+    else:
+        mode = _get_run_mode()
 
-    # 3. 定时推送（9:30、15:30 北京，全部 6 类，与实时去重）
-    # 轮巡时仅推监管预警+重大事件；定时类(漏洞/新闻/赛事/其他)仅在 slot 内或手动触发时推
+    quiet_now = _is_quiet_hours_beijing_now()
+    if quiet_now:
+        print("提示: 北京静默时段（20:00–次日 6:00），不执行任何推送（拉取与入库已完成）。")
+
+    # 2. 实时两类：轮巡 run，或 --push-all-now 全量（静默时段不推）
+    if not quiet_now and (mode == "poll" or force_push_all):
+        realtime_items = _collect_realtime_to_push(conn, new_realtime, include_db_backlog=force_push_all)
+        now_bj = _now_beijing()
+        realtime_items = [
+            x
+            for x in realtime_items
+            if _realtime_article_eligible_now(_parse_published_to_beijing(x.get("published_str")), now_bj)
+        ]
+        if realtime_items:
+            by_cat = {}
+            for item in realtime_items:
+                by_cat.setdefault(item["category"], []).append(item)
+            send_wechat_per_category(WECHAT_WEBHOOK, by_cat)
+            for item in realtime_items:
+                conn.execute(
+                    "INSERT OR IGNORE INTO pushed (link, pushed_at, push_type) VALUES (?, ?, ?)",
+                    (item["link"], datetime.now().isoformat(), "realtime"),
+                )
+            conn.commit()
+            tag = "全量实时" if force_push_all else "轮巡实时"
+            print(f"{tag}推送 {len(realtime_items)} 条")
+    elif new_realtime and mode != "poll" and not force_push_all:
+        if quiet_now:
+            print(f"提示: 有 {len(new_realtime)} 条实时类文章已入库，当前为静默时段，将在次日 6:00 后轮巡补推。")
+        else:
+            print(f"提示: 有 {len(new_realtime)} 条实时类文章已入库，当前非轮巡时段，将在 6:00–20:00 每两小时轮巡中推送")
+
+    # 3. 定时四类：9:30（含缺口窗）/ 15:30（仅今天）或强制汇总；静默时段不推
     slot = _get_scheduled_slot()
-    force_now = "--push-now" in sys.argv or os.getenv("PUSH_SCHEDULED_NOW") == "1"
-    if slot is not None or force_now:
-        ph = ",".join("?" * len(SCHEDULED_CATEGORIES))
+    if (
+        not quiet_now
+        and (force_push_all or (mode == "scheduled" and (slot is not None or force_timed_digest)))
+    ):
+        ph = ",".join("?" * len(TIMED_PUSH_CATEGORIES))
         cur = conn.execute(
             f"""SELECT link, title, published_str, category, author, source_url FROM articles
                WHERE category IN ({ph}) AND link NOT IN (SELECT link FROM pushed)""",
-            tuple(SCHEDULED_CATEGORIES),
+            tuple(TIMED_PUSH_CATEGORIES),
         )
         rows = cur.fetchall()
-        if slot == (15, 30):
-            rows = [(l, t, ps, c, a, su) for l, t, ps, c, a, su in rows if _is_today_beijing(_parse_published_to_beijing(ps))]
+        # --push-now --with-yesterday：临时把定时四类扩到「今天或昨天」（北京），不沿用 9:30 时间窗
+        if force_timed_digest and include_yesterday:
+            rows = [
+                (l, t, ps, c, a, su)
+                for l, t, ps, c, a, su in rows
+                if _is_today_or_yesterday_beijing(_parse_published_to_beijing(ps))
+            ]
         elif slot == (9, 30):
             rows = [(l, t, ps, c, a, su) for l, t, ps, c, a, su in rows if _is_in_930_window(_parse_published_to_beijing(ps))]
-        elif "--push-now" in sys.argv or os.getenv("PUSH_SCHEDULED_NOW") == "1":
+        elif slot == (15, 30):
+            rows = [(l, t, ps, c, a, su) for l, t, ps, c, a, su in rows if _is_today_beijing(_parse_published_to_beijing(ps))]
+        elif force_timed_digest:
             rows = [(l, t, ps, c, a, su) for l, t, ps, c, a, su in rows if _is_today_beijing(_parse_published_to_beijing(ps))]
         if rows:
             by_cat = {}
@@ -747,10 +983,11 @@ def main():
                 )
             conn.commit()
             print(f"定时推送 {len(rows)} 条")
-        elif "--push-now" in sys.argv:
-            print("定时推送: 0 条（无待推送文章，可能已推送过）")
-    elif not new_realtime:
-        print("提示: 定时类文章仅在 9:30、15:30 左右推送，或使用 python main.py --push-now 立即推送")
+        elif force_timed_digest:
+            hint = "（含昨天）" if include_yesterday else ""
+            print(f"定时推送: 0 条{hint}（无待推送文章，可能已推送过）")
+    elif mode is None and not new_realtime and not quiet_now:
+        print("提示: 当前不在轮巡时段(6:00–20:00 每两小时整点) 或 定时档(9:30/15:30)；实时两类在轮巡；其余四类在定时。使用 python main.py --push-now 仅推四类，或 python main.py --push-all-now 全量推送。")
 
     conn.close()
     print("完成")

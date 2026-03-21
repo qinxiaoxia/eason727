@@ -21,15 +21,18 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GITHUB_REPO = os.getenv("GITHUB_REPO", "qinxiaoxia/eason727")
 WORKFLOW_FILE = "rss-push.yml"
 
-# 请求间隔（环境变量），但不得低于 MIN_INTERVAL（避免「约 1 小时一次」叠在 schedule 上）
-_MIN = int(os.getenv("MIN_INTERVAL_MINUTES", "180"))
+# 硬下限 180 分钟：之前若同时设 INTERVAL_MINUTES=60 + MIN_INTERVAL_MINUTES=60，max(60,60)=60 会恢复「每小时」。
+# 仅当显式设置 I_ACCEPT_HOURLY_DUPLICATE_TRIGGER=1 时才允许低于 180（仍不推荐）。
 _raw = int(os.getenv("INTERVAL_MINUTES", "180"))
-INTERVAL_MINUTES = max(_raw, _MIN)
+_ALLOW_SUB_3H = os.getenv("I_ACCEPT_HOURLY_DUPLICATE_TRIGGER", "").strip().lower() in ("1", "true", "yes")
+if _ALLOW_SUB_3H:
+    _min_floor = int(os.getenv("MIN_INTERVAL_MINUTES", "60"))
+    INTERVAL_MINUTES = max(_raw, max(1, _min_floor))
+else:
+    INTERVAL_MINUTES = max(_raw, 180)
 if INTERVAL_MINUTES != _raw:
     print(
-        f"[Zeabur trigger] INTERVAL_MINUTES={_raw} 已调整为 {_MIN}（最少 {_MIN} 分钟），"
-        f"避免与 GitHub Actions schedule 重复触发。需要更短间隔可不再部署本服务、仅依赖 Actions；"
-        f"或设置 MIN_INTERVAL_MINUTES 降低下限（不推荐）。",
+        f"[Zeabur trigger] INTERVAL_MINUTES={_raw} → 实际 {INTERVAL_MINUTES} 分钟（与 GitHub schedule 并行时建议≥180）",
         flush=True,
     )
 

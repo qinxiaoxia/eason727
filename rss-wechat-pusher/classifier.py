@@ -1,50 +1,23 @@
 """
 文章分类器（共 6 类）
 
-【监管机构预警】—— 仅由规则命中（不走 LLM）
-  - 国家网络安全通报中心 + 标题以「重点防范」开头
-  - 国家互联网应急中心 CNCERT + 标题以「关于」开头且含「风险提示」
-  → 属于监管侧正式风险通报，实时推送。
+【监管机构预警 | Security Advisory】规则命中（不走 LLM）
+【漏洞信息 | Vulnerability】【重大安全事件 | Security Incident】【网安新闻资讯 | Industry News】
+【网安赛事资讯 | CTF/Competition】【其他资讯 | Other】—— LLM + 关键词
 
-【重大安全事件】—— LLM + 关键词辅助
-  - **定义**：必须是**已发生且已确认**的**实质性攻击事件**（网络攻击、勒索病毒、数据泄露等），
-    且**已造成实质影响**。**排除**：纯潜在风险、未遂攻击、**演练/演习类**（不论是否关基）。
-  - **常见适用主体**（不限于）：电网、供水、燃气、交通（铁路/民航/城市轨道）、医疗、政府机关、
-    银行、证券、能源、大型跨国企业（如微软、苹果、华为等）及同类关键领域。
-  - 与「漏洞信息」：偏重 CVE/补丁/披露且无「已出事」叙述 → 漏洞信息；已证实大规模实害 → 重大安全事件。
+优先级（冲突时）：重大安全事件 > 监管机构预警(规则) > 漏洞信息 > 网安赛事资讯 > 网安新闻资讯 > 其他资讯
 
-【漏洞信息】—— LLM
-  - CVE/CNNVD/厂商**安全公告**、安全更新、补丁说明、0-day/n-day **披露**、PoC/修复建议、
-    CVSS、组件/框架漏洞技术分析（未升格为全社会级事故报道时）。
-  - 与「重大安全事件」边界：以**技术披露、修复**为主 → 漏洞信息；以**事件后果、影响面**为主 → 重大安全事件。
-
-【网安新闻资讯】—— LLM
-  - **行业动态**：政策/立法/标准、监管约谈与合规、调研报告、投融资并购、人事、产品发布（非单一 CVE 通告）、
-    市场观点、技术解读/科普、安全大会**泛资讯**（非以 CTF/演练为主角）、数据安全/隐私合规新闻等。
-
-【网安赛事资讯】—— LLM
-  - **CTF**、AWD、解题赛、**攻防演练**（红队/护网/演习）、安全**竞赛**报名/赛况/成绩、战报、writeup、
-    人才赛、SRC **活动**若以比赛/打榜为主。
-
-【其他资讯】—— LLM
-  - 泛 IT、弱安全关联、边界模糊软文、无法稳定归入以上任一类的内容。
-
-说明：LLM 只从「漏洞信息、重大安全事件、网安新闻资讯、网安赛事资讯、其他资讯」五选一输出；
-     「监管机构预警」仅由本文件内规则函数命中。
-
-【实时推送】与 main.py 一致：`REALTIME_CATEGORIES = {监管机构预警, 重大安全事件}`。
-即：**重大安全事件** 与 **监管机构预警** 一样，在**首次入库**且**发布日=北京时间当天**、且未推送过时，会**立即推送到企业微信**（不按 9:30/15:30）。
-仅改库中旧数据的分类不会自动补发「实时」，需依赖之后定时汇总或手动 `--push-now`。
+实时两类仅轮巡；其余四类仅定时档。详见 _CLASSIFICATION_CRITERIA。
 """
 import re
 from typing import Optional
 
-# 实时推送类别（每 5 分钟检测到立即推送）
+# 实时推送类别（仅在轮巡 run 中推送，见 main.py _get_run_mode）
 REALTIME_CATEGORIES = {"监管机构预警", "重大安全事件"}
 
-# 定时推送类别（9:30、15:30 汇总推送，含全部 6 类，与实时去重）
+# 定时推送类别（仅 9:30 / 15:30 北京汇总推送，不含上面两类）
 ALL_CATEGORIES = ["监管机构预警", "重大安全事件", "漏洞信息", "网安新闻资讯", "网安赛事资讯", "其他资讯"]
-SCHEDULED_CATEGORIES = set(ALL_CATEGORIES)
+TIMED_PUSH_CATEGORIES = {"漏洞信息", "网安新闻资讯", "网安赛事资讯", "其他资讯"}
 
 # 大模型可选分类（不含「监管机构预警」，该类仅规则命中）
 LLM_CATEGORIES = ["漏洞信息", "重大安全事件", "网安新闻资讯", "网安赛事资讯", "其他资讯"]
@@ -55,11 +28,21 @@ ALERT_RULES = [
     ("国家互联网应急中心CNCERT", lambda t: (t or "").strip().startswith("关于") and "风险提示" in (t or "")),
 ]
 
+# LLM 输出英文标签 → 中文类名（用于解析；不含 other，避免匹配 another 等）
+_EN_LABEL_TO_CN = (
+    ("security incident", "重大安全事件"),
+    ("vulnerability", "漏洞信息"),
+    ("industry news", "网安新闻资讯"),
+    ("ctf/competition", "网安赛事资讯"),
+    ("competition", "网安赛事资讯"),
+    ("ctf", "网安赛事资讯"),
+)
+
 
 def _blob_excludes_confirmed_major_incident(blob: str) -> bool:
     """
-    重大安全事件必须【已发生且已确认】的实害，排除：未遂、纯潜在风险、各类演练/演习。
-    若为 True，则关键词层不判「重大安全事件」（交给 LLM 细判）。
+    排除：未遂、纯潜在风险、各类演练/演习（含攻防演练作「赛事」语境）。
+    若为 True，则关键词层不判「重大安全事件」。
     """
     if any(
         x in blob
@@ -85,46 +68,109 @@ def _blob_excludes_confirmed_major_incident(blob: str) -> bool:
         )
     ):
         return True
-    # 泛化：含「演练」「演习」易为演习类报道（步骤1已吃掉典型攻防/CTF；其余交给 LLM）
     if "演练" in blob or "演习" in blob:
         return True
     return False
 
 
-# 写入 Prompt 的精简版「六类划分」（与文件头 docstring 一致，供模型对齐）
+def _major_incident_blob_heuristic(blob: str, low: str) -> bool:
+    """重大安全事件：已发生事件类叙述（中英关键词 + 行业主体）。"""
+    zh_keys = (
+        "遭攻击",
+        "被攻击",
+        "泄露",
+        "被黑",
+        "勒索",
+        "入侵",
+        "篡改",
+        "瘫痪",
+        "数据泄露",
+        "信息泄露",
+        "勒索病毒",
+        "勒索软件",
+        "攻击事件",
+        "宕机",
+        "业务中断",
+        "供应链攻击",
+        "钓鱼攻击",
+        "大规模攻击",
+        "暗网出售",
+        "定向攻击",
+        "用户数据被盗",
+        "医院遭",
+        "医疗机构",
+        "政府网站",
+        "政务系统",
+        "银行遭",
+        "证券",
+        "电网",
+        "供电",
+        "供水",
+        "水务",
+        "燃气",
+        "铁路",
+        "民航",
+        "地铁",
+        "轨道交通",
+        "能源设施",
+        "核电站",
+    )
+    en_keys = (
+        "breach",
+        "data leak",
+        "ransomware",
+        "ddos",
+        "intrusion",
+        "compromised",
+        "outage",
+        "ransomware attack",
+        "supply chain attack",
+        "data breach",
+    )
+    if any(k in blob for k in zh_keys):
+        return True
+    if any(k in low for k in en_keys):
+        return True
+    if any(k in blob for k in ("微软", "苹果", "华为", "Google", "亚马逊")) and any(
+        k in blob for k in ("遭攻击", "被黑", "泄露", "勒索", "入侵", "停摆", "中断")
+    ):
+        return True
+    return False
+
+
+# 写入 Prompt：六类定义 + 流程 + 输出格式（与业务文档对齐）
 _CLASSIFICATION_CRITERIA = """
-你必须从下列五个分类中**严格只选一个**输出中文全称（不要标点、不要解释、不要换行）：
+你必须在下列五类中**只选一个**（监管机构预警由规则判定，你**不要**输出该类）：
 漏洞信息、重大安全事件、网安新闻资讯、网安赛事资讯、其他资讯
 
-【划分标准】
-1. 漏洞信息：CVE/CNNVD、厂商安全通告、补丁/安全更新、0-day·n-day 披露、PoC、组件/框架漏洞分析；
-   核心是「有编号或具体缺陷 + 修复/缓解」，**尚未强调已酿成大规模社会性事件**时优先本类。
+【六类定义摘要】
+1. 【监管机构预警 | Security Advisory】（你不用输出）：国家网络安全通报中心+标题「重点防范」开头；或 CNCERT+「关于」开头且含「风险提示」。
+2. 【漏洞信息 | Vulnerability】：具体软件/系统漏洞详情，含 CVE、CVSS、受影响版本、修复补丁等**技术参数**；**仅**以漏洞技术细节为主、**非**已发生安全事件报道。
+   关键词：漏洞, CVE, vulnerability, RCE, buffer overflow, privilege escalation, 0day, POC, CVSS, exploit
+3. 【重大安全事件 | Security Incident】：已实际发生的攻击、数据泄露、DDoS、勒索、入侵等；**即使提及 CVE，只要叙述的是已发生事件，优先本类**。
+   关键词：遭攻击, 泄露, 被黑, breach, hack, attack, data leak, DDoS, ransomware, intrusion, compromised, outage
+4. 【网安新闻资讯 | Industry News】：行业动态、趋势、政策解读、市场分析等。
+   关键词：发布, 趋势, 动态, 解读, 报告, release, trend, announcement, market analysis, industry report, whitepaper
+5. 【网安赛事资讯 | CTF/Competition】：CTF、护网、HVV、攻防演练赛、竞赛、Hackathon、红蓝对抗（作赛事/演练活动报道）。
+   关键词：CTF, 护网, HVV, 攻防演练, competition, contest, red-blue team, drill, hackathon
+6. 【其他资讯 | Other】：无法归入以上者；科普、教程、工具、招聘等。
+   关键词：科普, 教程, 工具, 招聘, tutorial, guide, course, tool, job, hiring
 
-2. 重大安全事件（**门槛高，宁缺毋滥**）：
-   - **必须**同时具备：① **已发生且已确认**的实质性攻击/入侵/泄露/勒索等；② **已造成实质影响**（业务停摆、大规模泄露、实质损失等）。
-   - **不得**归入本类：仅**潜在风险**、**未遂**、**预警性提示**而无已证实事件；**任何演练/演习**（含应急演练、桌面演练、勒索演练、攻防演练等——此类归「网安赛事资讯」或「其他资讯」）；
-     纯厂商 CVE/补丁通告而无「已爆发事件」报道。
-   - **主体**常涉及：电网、供水、燃气、铁路/民航/轨道、医疗、政府/政务、银行、证券、能源、大型跨国科技企业（微软、苹果、华为等）——**非主体清单内但若已达「已证实重大实害」仍可归入**。
+【分类优先级】重大安全事件 > 漏洞信息 > 网安赛事资讯 > 网安新闻资讯 > 其他资讯
+（监管机构预警不由你输出。）
 
-3. 网安新闻资讯：政策/监管/立法、合规动态、行业报告、投融资并购、产品动态（非单纯漏洞通告）、
-   观点评论、技术科普、安全会议/峰会**综合资讯**（主角不是某一场 CTF 或演练本身）。
+【分类流程】
+1. 先判断是否**已发生的安全事件**（遭攻击/泄露/被黑/勒索/DDoS/入侵/篡改/瘫痪 等或英文 breach/hack/attack/leak…）→ 重大安全事件（**提及 CVE 但写事件本身仍归此类**）。
+2. 再判断是否**漏洞技术通告**（CVE/CVSS/补丁/受影响版本为主，无事件叙述）→ 漏洞信息。
+3. 再判赛事/演练、行业新闻、其他。
 
-4. 网安赛事资讯：CTF、AWD、解题赛、攻防演练/护网/演习、安全竞赛、writeup、赛题/战报、以竞赛或演练为主线。
+【重要】⚠️ 优先判断「已发生事件」；提及 CVE 不等于漏洞信息。
+⚠️ 「导致某事件」+ CVE → 重大安全事件；「漏洞详情」+ CVE → 漏洞信息。
 
-5. 其他资讯：与网络安全弱相关、无法可靠归入以上任一类。
-
-【易混示例】（仅帮助理解）
-- 「微软发布本月补丁修复远程代码执行」→ 漏洞信息（非已发生事故报道）
-- 「多家医院证实遭勒索、手术排期中断」→ 重大安全事件（已发生+实质影响+医疗主体）
-- 「某单位开展勒索病毒应急演练」→ 网安赛事资讯或其它（**非**重大安全事件）
-- 「黑客试图入侵未果，专家提醒防范」→ 其他资讯或新闻（未遂+无实质影响 → **非**重大安全事件）
-- 「工信部印发××安全管理办法」→ 网安新闻资讯
-- 「×× CTF 决赛 / 护网攻防演练」→ 网安赛事资讯
-
-【冲突时优先级】含**演练/演习**且非「真实遭袭」叙述 → **绝不是**重大安全事件；
-已**证实**的大规模实害 + 非纯漏洞通告 → 重大安全事件优先于漏洞信息；
-标题或摘要中含 CVE/CNNVD/CNVD 编号且无大面积受害描述 → 倾向漏洞信息；
-其余卡边情况 → 其他资讯。
+【输出格式】**仅一行**，必须用下列格式之一（不要解释）：
+【中文分类名 | English Name】
+例如：【漏洞信息 | Vulnerability】
+或（兼容旧版）仅输出五个中文词之一：漏洞信息、重大安全事件、网安新闻资讯、网安赛事资讯、其他资讯
 """
 
 
@@ -140,22 +186,28 @@ def classify_by_rules(author: str, title: str, source_type: str) -> Optional[str
 
 def classify_by_keywords(title: str, summary: str) -> Optional[str]:
     """
-    关键词/模式优先于 LLM（减少飘类）。未命中则返回 None 再走大模型。
-    顺序：赛事 > CVE/编号漏洞 > 重大事件用语 > 政策/行业新闻
+    关键词优先于 LLM。顺序与业务优先级一致：
+    重大安全事件 → 网安赛事 → CVE/漏洞 → 行业新闻
     """
     blob = f"{title or ''}\n{summary or ''}"[:2400]
     low = blob.lower()
 
-    # 1) 赛事/演练（避免 CTF、护网被模型收成「重大事件」）
+    # 1) 重大安全事件（先于赛事与 CVE）
+    if not _blob_excludes_confirmed_major_incident(blob):
+        if _major_incident_blob_heuristic(blob, low):
+            return "重大安全事件"
+
+    # 2) 网安赛事资讯（CTF/护网/HVV/攻防演练作赛事语境）
     if re.search(
-        r"(\bctf\b|ctf[杯赛战]|攻防演练|护网20\d{2}|护网行动|实网攻防|awd赛|红队演练"
-        r"|安全竞赛|解题赛|赛题|writeup|题解|\bwp\b|技能大赛|极客挑战|强网杯)",
+        r"(\bctf\b|ctf[杯赛战]|攻防演练|护网20\d{2}|护网行动|实网攻防|awd赛|红队演练|红蓝对抗"
+        r"|安全竞赛|解题赛|赛题|writeup|题解|\bwp\b|技能大赛|极客挑战|强网杯|\bhvv\b"
+        r"|hackathon|competition|contest|red-blue team|\bdrill\b)",
         blob,
         re.I,
     ):
         return "网安赛事资讯"
 
-    # 2) 明确 CVE/CNNVD：一般是漏洞通告；若同时强调已酿成大面积事故 → 重大事件
+    # 3) CVE/CNNVD：事件叙述 → 重大；否则漏洞信息
     if re.search(r"CVE-\d{4}-\d{4,8}", blob, re.I) or re.search(
         r"CNNVD-\d{4,}-\d+|CNVD-\d{4,}-\d+", blob, re.I
     ):
@@ -179,27 +231,39 @@ def classify_by_keywords(title: str, summary: str) -> Optional[str]:
                 "已确认",
                 "证实",
             )
+        ) or any(
+            k in low
+            for k in (
+                "breach",
+                "attack",
+                "ransomware",
+                "leaked",
+                "compromised",
+                "outage",
+            )
         )
         if severe and not _blob_excludes_confirmed_major_incident(blob):
             return "重大安全事件"
         return "漏洞信息"
 
-    # 3) 典型漏洞通告用语（无 CVE 时）
-    vuln_only = any(
-        k in blob
-        for k in (
-            "安全公告",
-            "安全通告",
-            "补丁日",
-            "安全更新",
-            "远程代码执行",
-            "未修补漏洞",
-            "PoC公开",
-            "0-day漏洞",
-            "0day",
-            "n-day",
-        )
-    ) and not any(
+    # 4) 漏洞技术词（无 CVE 时）
+    vuln_kw = (
+        "安全公告",
+        "安全通告",
+        "补丁日",
+        "安全更新",
+        "远程代码执行",
+        "未修补漏洞",
+        "PoC公开",
+        "0-day漏洞",
+        "0day",
+        "n-day",
+        "CVSS",
+        "privilege escalation",
+        "buffer overflow",
+        "rce",
+    )
+    vuln_only = any(k in blob or k in low for k in vuln_kw) and not any(
         k in blob
         for k in (
             "数据泄露",
@@ -215,51 +279,7 @@ def classify_by_keywords(title: str, summary: str) -> Optional[str]:
     if vuln_only:
         return "漏洞信息"
 
-    # 4) 重大安全事件：实害 + 关基/重点行业等主体信号；排除演练/未遂/纯风险（见上文函数）
-    if _blob_excludes_confirmed_major_incident(blob):
-        pass
-    elif any(
-        k in blob
-        for k in (
-            "数据泄露",
-            "信息泄露",
-            "勒索软件",
-            "勒索攻击",
-            "勒索病毒",
-            "大规模攻击",
-            "供应链攻击",
-            "关键基础设施",
-            "医院遭",
-            "医疗机构",
-            "政府网站",
-            "政务系统",
-            "银行遭",
-            "证券",
-            "用户数据被盗",
-            "暗网出售",
-            "定向攻击",
-            "钓鱼攻击",
-            "宕机",
-            "业务中断",
-            "电网",
-            "供电",
-            "供水",
-            "水务",
-            "燃气",
-            "铁路",
-            "民航",
-            "地铁",
-            "轨道交通",
-            "能源设施",
-            "核电站",
-        )
-    ) or (
-        any(k in blob for k in ("微软", "苹果", "华为", "Google", "亚马逊"))
-        and any(k in blob for k in ("遭攻击", "被黑", "泄露", "勒索", "入侵", "停摆", "中断"))
-    ):
-        return "重大安全事件"
-
-    # 5) 偏政策/行业动态（避免吃进「漏洞」类）
+    # 5) 网安新闻资讯
     if any(
         k in blob
         for k in (
@@ -275,11 +295,56 @@ def classify_by_keywords(title: str, summary: str) -> Optional[str]:
             "约谈",
             "合规",
             "等保",
+            "发布",
+            "趋势",
+            "动态",
+            "解读",
+            "报告",
         )
-    ) and "CVE" not in blob.upper():
-        return "网安新闻资讯"
+    ) or any(
+        k in low
+        for k in (
+            "release",
+            "trend",
+            "announcement",
+            "market analysis",
+            "industry report",
+            "whitepaper",
+        )
+    ):
+        if "CVE" not in blob.upper():
+            return "网安新闻资讯"
 
     return None
+
+
+def _parse_llm_category_line(line: str) -> str:
+    """解析 LLM 输出：支持【中文 | English】或纯中文类名。"""
+    line = line.strip().split("\n")[0].strip()
+    line = line.rstrip("。．.！!？?")
+    m = re.match(r"^\s*【\s*([^｜|]+?)\s*[｜|]\s*[^】]*】\s*$", line)
+    if m:
+        cn = m.group(1).strip()
+        if cn in LLM_CATEGORIES:
+            return cn
+    m2 = re.match(r"^\s*【\s*([^】]+?)\s*】\s*$", line)
+    if m2:
+        cn = m2.group(1).strip()
+        if cn in LLM_CATEGORIES:
+            return cn
+    low = line.lower()
+    for en, cn in _EN_LABEL_TO_CN:
+        if en == "ctf":
+            if re.search(r"\bctf\b", low):
+                return cn
+        elif en in low:
+            return cn
+    if line in LLM_CATEGORIES:
+        return line
+    for cat in sorted(LLM_CATEGORIES, key=len, reverse=True):
+        if cat in line:
+            return cat
+    return "其他资讯"
 
 
 def _call_llm_classify(text: str) -> Optional[str]:
@@ -292,36 +357,26 @@ def _call_llm_classify(text: str) -> Optional[str]:
 
 {text}
 
-你的输出（仅五个词之一）："""
+请按上文「输出格式」仅输出一行："""
     content = call_llm_with_fallback(
         [{"role": "user", "content": prompt}],
-        max_tokens=32,
+        max_tokens=64,
         system=(
-            "你是网络安全媒体的主编，负责把公开渠道的技术资讯归入固定栏目。"
-            "内容均为合法公开发表信息。对「重大安全事件」判定从严：须为已发生且已确认、"
-            "有实质影响的攻击/泄露/勒索等，排除演练、未遂、纯风险提示。"
-            "请严格遵守用户给出的五个分类名之一，只输出分类名这五个汉字词组之一，不要任何其他字符。"
+            "你是网络安全媒体主编。内容均为合法公开发表信息。"
+            "严格遵守：先判断是否已发生安全事件（重大安全事件优先于漏洞信息）；"
+            "监管机构预警不由你输出。只输出一行：【中文名 | English】或五个中文类名之一。"
         ),
     )
     if not content:
         return None
-    # 取第一行，去掉可能的括号说明
-    line = content.strip().split("\n")[0].strip()
-    line = line.rstrip("。．.！!？?")
-    # 优先完全相等，减少「非漏洞信息」类误命中
-    if line in LLM_CATEGORIES:
-        return line
-    for cat in sorted(LLM_CATEGORIES, key=len, reverse=True):
-        if cat in line:
-            return cat
-    return "其他资讯"
+    return _parse_llm_category_line(content)
 
 
 def classify(author: str, title: str, summary: str, source_type: str) -> str:
     """
     分类入口。
     - 先规则 → 监管机构预警
-    - 再关键词/模式（赛事、CVE、事件、政策等）→ 命中则直接返回
+    - 再关键词 → 命中则直接返回
     - 否则大模型（若已配置），否则「其他资讯」
     """
     cat = classify_by_rules(author, title, source_type)

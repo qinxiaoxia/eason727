@@ -25,11 +25,16 @@ FEEDS = (
     ]
 )
 
-# 定时推送时间（小时, 分钟），每天两次
+# 定时推送（北京时间，仅「其余四类」）：每天 9:30、15:30 各一次（须与 workflow 中定时 cron 一致）
 SCHEDULED_PUSH_TIMES = [(9, 30), (15, 30)]
 
-# 推送时间窗口（分钟），即 9:28-9:32 或 15:28-15:32 内运行才视为定时推送（收紧避免误触发）
+# 定时档时间窗口（± 分钟）
 SCHEDULED_WINDOW_MINUTES = 2
+
+# 轮巡（仅「实时两类」）：北京 6:00–18:00 每两小时整点（20:00–次日 6:00 静默不推），须与 workflow 轮巡 cron 一致
+POLL_HOURS_BEIJING = (6, 8, 10, 12, 14, 16, 18)
+# 整点后若干分钟内视为本轮轮巡（容错 GitHub Actions 延迟）
+POLL_WINDOW_MINUTES = 5
 
 # 大模型分类 / 翻译：规则未命中时调用 LLM；LLM_API_KEY 留空则全部归为「其他资讯」
 # 支持 OpenAI 兼容 API：DashScope、DeepSeek、智谱等
