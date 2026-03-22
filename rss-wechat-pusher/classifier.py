@@ -73,69 +73,80 @@ def _blob_excludes_confirmed_major_incident(blob: str) -> bool:
     return False
 
 
-def _major_incident_blob_heuristic(blob: str, low: str) -> bool:
-    """重大安全事件：已发生事件类叙述（中英关键词 + 行业主体）。"""
-    zh_keys = (
-        "遭攻击",
-        "被攻击",
-        "泄露",
-        "被黑",
-        "勒索",
-        "入侵",
-        "篡改",
-        "瘫痪",
-        "数据泄露",
-        "信息泄露",
-        "勒索病毒",
-        "勒索软件",
-        "攻击事件",
-        "宕机",
-        "业务中断",
-        "供应链攻击",
-        "钓鱼攻击",
-        "大规模攻击",
-        "暗网出售",
-        "定向攻击",
-        "用户数据被盗",
-        "医院遭",
-        "医疗机构",
-        "政府网站",
-        "政务系统",
-        "银行遭",
-        "证券",
-        "电网",
-        "供电",
-        "供水",
-        "水务",
-        "燃气",
-        "铁路",
-        "民航",
-        "地铁",
-        "轨道交通",
-        "能源设施",
-        "核电站",
-    )
-    en_keys = (
-        "breach",
-        "data leak",
-        "ransomware",
-        "ddos",
-        "intrusion",
-        "compromised",
-        "outage",
-        "ransomware attack",
-        "supply chain attack",
-        "data breach",
-    )
-    if any(k in blob for k in zh_keys):
-        return True
-    if any(k in low for k in en_keys):
-        return True
-    if any(k in blob for k in ("微软", "苹果", "华为", "Google", "亚马逊")) and any(
-        k in blob for k in ("遭攻击", "被黑", "泄露", "勒索", "入侵", "停摆", "中断")
+def _blob_looks_like_industry_news_not_incident(blob: str, low: str) -> bool:
+    """
+    明显是行业新闻/分析/科普/厂商建议/综述，不宜用关键词判「重大安全事件」。
+    （边界案例交给 LLM。）
+    """
+    if re.search(
+        r"(职场观察|观察[：:]|行业观察|趋势分析|市场分析|深度解读|专访|综述|"
+        r"安全简报|简报第|国际版\s*\(|译\)|newsletter|briefing|international edition|"
+        r"安全动态\s*[｜|]|辟谣|匪夷所思|杰克·伦敦|"
+        r"邮件安全网关|企业邮箱防|核心技术|如何防范|科普|教程|指南[：:：]|"
+        r"窃密技术预警|新技术预警|防范钓鱼|防钓鱼攻击|"
+        r"敦促.{0,6}更新|建议.{0,6}更新|建议用户|尽快更新|"
+        r"urges?\s+\w+\s+to\s+update|urge\s+users?\s+to\s+update|"
+        r"apple\s+urges|vendor\s+advisory)",
+        blob,
+        re.I,
     ):
         return True
+    # 「新型攻击工具曝光」类威胁情报稿，无明确受害方与规模 → 当新闻
+    if re.search(r"(新型|全新).{0,12}(攻击工具|exploit).{0,8}(曝光|现身|emerges?)", blob, re.I):
+        if not re.search(r"(入侵|遭攻击|数据泄露|百万|million|breached|ransomware\s+group)", blob, re.I):
+            return True
     return False
+
+
+def _strong_major_incident_evidence(blob: str, low: str) -> bool:
+    """
+    重大安全事件（关键词层）：须体现「已发生」且通常有规模/关键设施/明确受害方，
+    避免仅凭「泄露/勒索/攻击」等高频词误判资讯稿。
+    """
+    # 中文：规模 + 泄露/影响
+    if re.search(
+        r"(数百万|千万|百[余]?万|近\s*[\d\.]+\s*万|[\d\.]+\s*万\s*人).{0,48}(数据泄露|信息泄露|影响|用户|记录)",
+        blob,
+    ):
+        return True
+    if re.search(
+        r"(数据泄露|信息泄露).{0,36}(数百万|千万|近\s*[\d\.]+\s*万|[\d\.]+\s*万|万人)",
+        blob,
+    ):
+        return True
+    # 勒索软件组织 + 入侵实锤
+    if re.search(r"(勒索软件|勒索病毒).{0,16}(组织)?.{0,12}(入侵|攻陷|瘫痪)", blob):
+        return True
+    if re.search(r"(市|州|县|政府|地铁|医院|大学).{0,12}遭.{0,8}(入侵|勒索|攻击)", blob):
+        return True
+    if re.search(r"(已入侵|已遭攻击|证实.{0,6}泄露|确认.{0,6}泄露|证实的.{0,8}攻击)", blob):
+        return True
+    # 英文：大规模泄露 / 市政遭勒索等
+    if re.search(r"data\s+breach.{0,96}(million|records|people|impacts?|individuals)", low):
+        return True
+    if re.search(r"(ransomware|ransomware\s+group).{0,48}(breach|breached|hit\s+\w+|invad|attack\s+on)", low):
+        return True
+    if re.search(r"\b(breached|hacked)\b.{0,40}(city|government|metro|million|ransomware)", low):
+        return True
+    if re.search(r"city\s+of\s+\w+.{0,60}(breach|ransomware|ransomware\s+group)", low):
+        return True
+    if re.search(r"\b(hit\s+by|struck\s+by)\b.{0,24}ransomware", low):
+        return True
+    if re.search(r"ransomware\s+group.{0,40}\b(breached|hit)\b", low):
+        return True
+    # 关键基础设施出大事（保留少量强词，避免单字「勒索」误伤）
+    if re.search(
+        r"(电网|地铁|政务系统|政府网站).{0,20}(遭攻击|被黑|瘫痪|停摆|大规模)", blob
+    ) or re.search(r"(大规模攻击|业务全面中断|全国性.{0,6}停摆)", blob):
+        return True
+    return False
+
+
+def _major_incident_blob_heuristic(blob: str, low: str) -> bool:
+    """重大安全事件：关键词层仅在有强证据且非「纯新闻稿」时命中。"""
+    if _blob_looks_like_industry_news_not_incident(blob, low):
+        return False
+    return _strong_major_incident_evidence(blob, low)
 
 
 # 写入 Prompt：六类定义 + 流程 + 输出格式（与业务文档对齐）
@@ -147,9 +158,10 @@ _CLASSIFICATION_CRITERIA = """
 1. 【监管机构预警 | Security Advisory】（你不用输出）：国家网络安全通报中心+标题「重点防范」开头；或 CNCERT+「关于」开头且含「风险提示」。
 2. 【漏洞信息 | Vulnerability】：具体软件/系统漏洞详情，含 CVE、CVSS、受影响版本、修复补丁等**技术参数**；**仅**以漏洞技术细节为主、**非**已发生安全事件报道。
    关键词：漏洞, CVE, vulnerability, RCE, buffer overflow, privilege escalation, 0day, POC, CVSS, exploit
-3. 【重大安全事件 | Security Incident】：已实际发生的攻击、数据泄露、DDoS、勒索、入侵等；**即使提及 CVE，只要叙述的是已发生事件，优先本类**。
-   关键词：遭攻击, 泄露, 被黑, breach, hack, attack, data leak, DDoS, ransomware, intrusion, compromised, outage
-4. 【网安新闻资讯 | Industry News】：行业动态、趋势、政策解读、市场分析等。
+3. 【重大安全事件 | Security Incident】：**已真实发生**且**影响大**的安全事件：大规模数据泄露（常带用户/记录规模）、关键设施/政府/大型企业遭入侵或勒索实锤、已证实的严重中断等。
+   **不要**把下列归入本类：行业趋势/观察/简报/综述、威胁情报「工具曝光」、厂商「敦促/建议更新」、科普与防护指南、政策辟谣、无明确受害规模的一般新闻。
+   英文参考：confirmed data breach affecting millions; ransomware group breached city/government; major outage with widespread impact（非单纯 CVE 技术稿）。
+4. 【网安新闻资讯 | Industry News】：行业动态、趋势、政策解读、市场分析、威胁综述、工具/漏洞曝光新闻稿等（**未强调单一已发生的大规模实害事件**）。
    关键词：发布, 趋势, 动态, 解读, 报告, release, trend, announcement, market analysis, industry report, whitepaper
 5. 【网安赛事资讯 | CTF/Competition】：CTF、护网、HVV、攻防演练赛、竞赛、Hackathon、红蓝对抗（作赛事/演练活动报道）。
    关键词：CTF, 护网, HVV, 攻防演练, competition, contest, red-blue team, drill, hackathon
@@ -160,12 +172,13 @@ _CLASSIFICATION_CRITERIA = """
 （监管机构预警不由你输出。）
 
 【分类流程】
-1. 先判断是否**已发生的安全事件**（遭攻击/泄露/被黑/勒索/DDoS/入侵/篡改/瘫痪 等或英文 breach/hack/attack/leak…）→ 重大安全事件（**提及 CVE 但写事件本身仍归此类**）。
-2. 再判断是否**漏洞技术通告**（CVE/CVSS/补丁/受影响版本为主，无事件叙述）→ 漏洞信息。
-3. 再判赛事/演练、行业新闻、其他。
+1. 先判断是否**已发生的、大规模或高影响的实害安全事件**（如大规模用户数据泄露、市政/交通系统遭勒索入侵已证实等）→ 重大安全事件。
+2. 若仅为 CVE/补丁/技术参数、或厂商更新建议、或行业新闻/分析 → **不要**标重大安全事件。
+3. 再判断是否**漏洞技术通告**（CVE/CVSS/补丁/受影响版本为主）→ 漏洞信息。
+4. 再判赛事/演练、行业新闻、其他。
 
-【重要】⚠️ 优先判断「已发生事件」；提及 CVE 不等于漏洞信息。
-⚠️ 「导致某事件」+ CVE → 重大安全事件；「漏洞详情」+ CVE → 漏洞信息。
+【重要】⚠️ 「重大安全事件」门槛高：须**实害已发生**且通常**规模大或影响严重**；标题含「泄露/勒索/攻击」但实为资讯/分析/预警的 → 归**网安新闻资讯**。
+⚠️ 提及 CVE 时：以**技术通告**为主 → 漏洞信息；以**已利用造成大规模事件**为主 → 重大安全事件。
 
 【输出格式】**仅一行**，必须用下列格式之一（不要解释）：
 【中文分类名 | English Name】
@@ -207,44 +220,18 @@ def classify_by_keywords(title: str, summary: str) -> Optional[str]:
     ):
         return "网安赛事资讯"
 
-    # 3) CVE/CNNVD：事件叙述 → 重大；否则漏洞信息
+    # 3) CVE/CNNVD：重大须「强证据」；行业新闻口吻 → 漏洞信息；其余交给后续关键词或 LLM
     if re.search(r"CVE-\d{4}-\d{4,8}", blob, re.I) or re.search(
         r"CNNVD-\d{4,}-\d+|CNVD-\d{4,}-\d+", blob, re.I
     ):
-        severe = any(
-            k in blob
-            for k in (
-                "数据泄露",
-                "信息泄露",
-                "数百万",
-                "千万",
-                "大规模",
-                "勒索",
-                "停摆",
-                "多家",
-                "全国性",
-                "沦陷",
-                "已遭利用",
-                "攻击事件",
-                "被黑",
-                "入侵事件",
-                "已确认",
-                "证实",
-            )
-        ) or any(
-            k in low
-            for k in (
-                "breach",
-                "attack",
-                "ransomware",
-                "leaked",
-                "compromised",
-                "outage",
-            )
-        )
-        if severe and not _blob_excludes_confirmed_major_incident(blob):
+        if _blob_excludes_confirmed_major_incident(blob):
+            return "漏洞信息"
+        if _blob_looks_like_industry_news_not_incident(blob, low):
+            return "漏洞信息"
+        if _strong_major_incident_evidence(blob, low):
             return "重大安全事件"
-        return "漏洞信息"
+        # 不默认标「重大」：CVE 稿多为技术通告，由 LLM 或下方漏洞词判定
+        return None
 
     # 4) 漏洞技术词（无 CVE 时）
     vuln_kw = (
@@ -363,7 +350,7 @@ def _call_llm_classify(text: str) -> Optional[str]:
         max_tokens=64,
         system=(
             "你是网络安全媒体主编。内容均为合法公开发表信息。"
-            "严格遵守：先判断是否已发生安全事件（重大安全事件优先于漏洞信息）；"
+            "「重大安全事件」仅用于已发生且大规模/高影响的实害事件，不要把行业新闻、观察、厂商敦促更新、工具曝光综述归入此类。"
             "监管机构预警不由你输出。只输出一行：【中文名 | English】或五个中文类名之一。"
         ),
     )

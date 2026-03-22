@@ -21,7 +21,8 @@ FEEDS = (
         ("https://www.helpnetsecurity.com/feed/", "rss"),
         ("http://hackernews.cc/feed", "rss"),
         ("https://api.anquanke.com/data/v1/rss", "rss"),
-        ("https://www.freebuf.com/feed/", "rss"),
+        ("https://www.4hou.com/feed", "rss"),
+        ("http://securityaffairs.co/wordpress/feed", "rss"),
     ]
 )
 

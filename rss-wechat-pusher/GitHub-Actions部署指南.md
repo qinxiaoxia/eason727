@@ -62,13 +62,14 @@ git push -u origin main
   ["https://www.helpnetsecurity.com/feed/", "rss"],
   ["http://hackernews.cc/feed", "rss"],
   ["https://api.anquanke.com/data/v1/rss", "rss"],
-  ["https://www.freebuf.com/feed/", "rss"]
+  ["https://www.4hou.com/feed", "rss"],
+  ["http://securityaffairs.co/wordpress/feed", "rss"]
 ]
 ```
 
 复制时去掉换行，压缩成一行，例如：
 ```
-[["https://eason727.zeabur.app/feeds/all.atom","wewe_rss"],["https://cybersecuritynews.com/feed/","rss"],["https://www.helpnetsecurity.com/feed/","rss"],["http://hackernews.cc/feed","rss"],["https://api.anquanke.com/data/v1/rss","rss"],["https://www.freebuf.com/feed/","rss"]]
+[["https://eason727.zeabur.app/feeds/all.atom","wewe_rss"],["https://cybersecuritynews.com/feed/","rss"],["https://www.helpnetsecurity.com/feed/","rss"],["http://hackernews.cc/feed","rss"],["https://api.anquanke.com/data/v1/rss","rss"],["https://www.4hou.com/feed","rss"],["http://securityaffairs.co/wordpress/feed","rss"]]
 ```
 
 ### FreeBuf 在 GitHub Actions 上报 405
