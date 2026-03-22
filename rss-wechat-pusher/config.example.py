@@ -31,8 +31,8 @@ SCHEDULED_PUSH_TIMES = [(9, 30), (15, 30)]
 # 定时档时间窗口（± 分钟）
 SCHEDULED_WINDOW_MINUTES = 2
 
-# 轮巡（仅「实时两类」）：北京 6:00–18:00 每两小时整点（20:00–次日 6:00 静默不推），须与 workflow 轮巡 cron 一致
-POLL_HOURS_BEIJING = (6, 8, 10, 12, 14, 16, 18)
+# 轮巡（仅「实时两类」）：北京 6、8、12、14、18 整点（跳过 10:00/16:00 与 9:30/15:30 定时错峰；20:00–次日 6:00 静默不推），须与 workflow 轮巡 cron 一致
+POLL_HOURS_BEIJING = (6, 8, 12, 14, 18)
 # 整点后若干分钟内视为本轮轮巡（容错 GitHub Actions 延迟）
 POLL_WINDOW_MINUTES = 5
 

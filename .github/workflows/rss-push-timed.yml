@@ -1,16 +1,11 @@
-# RSS 推送到企业微信（轮巡）
-# - 北京 6、8、12、14、18 整点轮巡（跳过 10:00/16:00，与 9:30/15:30 定时错峰）；实时两类（20:00–次日 6:00 静默不推）
-# - 北京 9:30 / 15:30 定时四类：见 rss-push-timed.yml（与轮巡拆分，减少同文件多 cron 漏跑）
-# - 推送后标记已推送，避免重复
-# Secrets: WECHAT_WEBHOOK, FEEDS_JSON (必填) | LLM_API_KEY, LLM_BASE_URL, LLM_MODELS_JSON 或 LLM_MODEL (可选)
-name: RSS Push
+# 仅「定时四类」：北京 9:30 / 15:30（与 rss-push.yml 轮巡拆分，降低 schedule 漏跑概率）
+# Secrets 与 rss-push.yml 相同
+name: RSS Push Timed
 
 on:
   schedule:
-    # 轮巡：北京 6、8、12、14、18 → UTC 22,0,4,6,10（跳过 UTC 2、8 = 北京 10:00、16:00）
-    - cron: "0 22,0,4,6,10 * * *"
+    - cron: "30 1,7 * * *" # UTC 1:30、7:30 → 北京 9:30、15:30
   workflow_dispatch:
-  repository_dispatch:   # 外部定时服务可调用 API 触发，作为 schedule 不生效时的备用
 
 jobs:
   push:
@@ -20,7 +15,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # 保证后续 git pull --rebase 正常（默认 depth=1 偶发 rebase 问题）
           fetch-depth: 0
 
       - name: Set up Python
@@ -35,15 +29,14 @@ jobs:
         env:
           WECHAT_WEBHOOK: ${{ secrets.WECHAT_WEBHOOK }}
           FEEDS_JSON: ${{ secrets.FEEDS_JSON }}
-          # 可选：FreeBuf 在 Actions 出口 IP 上常 405，填自建 RSSHub 等镜像全文 URL（如 https://rsshub.xxx/freebuf/articles/web）
           FREEBUF_RSS_MIRROR: ${{ secrets.FREEBUF_RSS_MIRROR }}
           WEWE_RSS_URL: ${{ secrets.WEWE_RSS_URL }}
           LLM_MODELS_JSON: ${{ secrets.LLM_MODELS_JSON }}
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
           LLM_MODEL: ${{ secrets.LLM_MODEL }}
-          # 可选：RSS_PUSH_MODE=poll|scheduled 强制本轮只跑轮巡或只跑定时；留空则按北京时间自动判断
-          PUSH_SCHEDULED_NOW: ""
+          # 与仅按时钟判断相比，显式标记「本轮为定时汇总」，延迟错过 slot 窗口时仍能走四类逻辑
+          PUSH_SCHEDULED_NOW: "1"
         run: |
           cd rss-wechat-pusher
           cp config.example.py config.py
@@ -59,6 +52,5 @@ jobs:
             exit 0
           fi
           git commit -m "chore: update rss push state"
-          # 远端可能在此期间有新提交（你本地 push 等），先 rebase 再推避免 rejected
           git pull --rebase origin main
           git push origin main
