@@ -6,11 +6,9 @@
 name: RSS Push
 
 on:
-  schedule:
-    # 轮巡：北京 6、8、12、14、18 → UTC 22,0,4,6,10（跳过 UTC 2、8 = 北京 10:00、16:00）
-    - cron: "0 22,0,4,6,10 * * *"
+  # 轮巡由 Zeabur（zeabur-cron-trigger）按北京时间触发 workflow_dispatch，不用 GitHub schedule（不稳定）
   workflow_dispatch:
-  repository_dispatch:   # 外部定时服务可调用 API 触发，作为 schedule 不生效时的备用
+  repository_dispatch:   # 仍可用 API 自定义触发
 
 jobs:
   push:

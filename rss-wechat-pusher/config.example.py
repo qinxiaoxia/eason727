@@ -45,16 +45,27 @@ LLM_BASE_URL = os.getenv("LLM_BASE_URL") or "https://api.deepseek.com/v1"
 LLM_MODEL = os.getenv("LLM_MODEL") or "deepseek-chat"
 
 # 多模型回退：同一 KEY + BASE_URL 下按顺序尝试，前一个失败/无内容则换下一个
-# GitHub Actions：新增 Secret「LLM_MODELS_JSON」，一行 JSON，例如：
-# ["qwen-plus","qwen1.5-110b-chat","deepseek-r1-distill-qwen-7b","qwen3-32b"]
+# GitHub Actions：Secret「LLM_MODELS_JSON」填一行 JSON 数组，例如（勿换行或压缩为一行）：
+# ["qwen-plus-2025-07-28","qwen-plus-0112","qwen-plus-2025-12-01","qwen-plus-character","qwen-plus-1220","qwen-plus-latest","qwen-plus-2025-09-11","qwen-plus-2025-01-25","qwen-plus-2025-04-28","qwen-plus-2025-07-14"]
 _llm_models_json = os.getenv("LLM_MODELS_JSON")
 try:
     LLM_MODELS = json.loads(_llm_models_json) if _llm_models_json else []
 except json.JSONDecodeError:
     LLM_MODELS = []
 if not LLM_MODELS:
-    # 本地可复制本列表；需与 LLM_BASE_URL 为同一平台（如均为 DashScope compatible-mode）
-    LLM_MODELS = []
+    # 本地默认：与 DashScope compatible-mode 搭配；可按控制台可用模型增删顺序
+    LLM_MODELS = [
+        "qwen-plus-2025-07-28",
+        "qwen-plus-0112",
+        "qwen-plus-2025-12-01",
+        "qwen-plus-character",
+        "qwen-plus-1220",
+        "qwen-plus-latest",
+        "qwen-plus-2025-09-11",
+        "qwen-plus-2025-01-25",
+        "qwen-plus-2025-04-28",
+        "qwen-plus-2025-07-14",
+    ]
 
 # 纯英文标题自动翻译为中文（需配置 LLM）
 # 勿使用「数学专用」等不适配 NLP 的模型名做翻译，易拒答或重复输出
