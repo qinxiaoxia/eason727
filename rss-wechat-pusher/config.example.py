@@ -12,6 +12,8 @@ WEWE_RSS_URL = os.getenv("WEWE_RSS_URL") or "https://eason727.zeabur.app/feeds/a
 # RSS 源配置：每项为 (feed_url, source_type)
 # source_type: "wewe_rss" = 微信公众号（WeWe RSS），"rss" = 普通 RSS
 # 环境变量 FEEDS_JSON 可覆盖，格式：[["url1","wewe_rss"],["url2","rss"]]
+# 蚁景网安「网络安全日报」：由 generate_yijinglab_feed.py 在定时 workflow 内生成 generated_feeds/yijinglab.xml
+# （列表页按北京「今日」选日报，详情拆条；main.py 若发现该文件会自动追加为订阅源）。
 _feeds_json = os.getenv("FEEDS_JSON")
 FEEDS = (
     [(u, t) for u, t in json.loads(_feeds_json)] if _feeds_json

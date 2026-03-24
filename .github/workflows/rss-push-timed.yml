@@ -24,6 +24,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r rss-wechat-pusher/requirements.txt
 
+      - name: Generate Yijinglab daily RSS (北京 9:30 档，每日一次)
+        run: python rss-wechat-pusher/generate_yijinglab_feed.py
+
       - name: Run RSS Push
         env:
           WECHAT_WEBHOOK: ${{ secrets.WECHAT_WEBHOOK }}

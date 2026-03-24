@@ -2,5 +2,9 @@ config.py
 seen_links.db
 rss_push.db
 rss_push.db-journal
+rss_push.db-wal
+rss_push.db-shm
 __pycache__/
 *.pyc
+# 本地/CI 由 generate_yijinglab_feed.py 生成，勿提交
+generated_feeds/yijinglab.xml

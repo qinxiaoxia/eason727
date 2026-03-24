@@ -52,6 +52,14 @@ except ImportError:
         print("请复制 config.example.py 为 config.py 并填写配置")
         sys.exit(1)
 
+# 若存在本机生成的蚁景网安日报 RSS（由 generate_yijinglab_feed.py 在定时 9:30 档生成）
+FEEDS = list(FEEDS)
+_yijing_feed = Path(__file__).resolve().parent / "generated_feeds" / "yijinglab.xml"
+if _yijing_feed.is_file():
+    _yijing_url = f"file://{_yijing_feed.resolve()}"
+    if _yijing_url not in {u for u, _ in FEEDS}:
+        FEEDS.append((_yijing_url, "rss"))
+
 # 数据库路径：CI 下用仓库内文件（可持久化），本地用用户目录
 if os.getenv("CI") and os.getenv("GITHUB_WORKSPACE"):
     DB_DIR = Path(os.getenv("GITHUB_WORKSPACE")) / "rss-wechat-pusher"
@@ -81,6 +89,10 @@ def init_db(conn):
             link TEXT PRIMARY KEY,
             pushed_at TEXT,
             push_type TEXT
+        );
+        CREATE TABLE IF NOT EXISTS meta (
+            k TEXT PRIMARY KEY,
+            v TEXT
         );
     """)
     conn.commit()
@@ -352,6 +364,11 @@ def _hostname_from_feed(feed_url: str) -> str:
     """RSS/Atom 页的域名，用于网站类来源展示。"""
     from urllib.parse import urlparse
 
+    fu = (feed_url or "").lower()
+    # 本地生成的蚁景日报 feed 无 netloc，与其它 RSS 域名一致用裸域
+    if "yijinglab.xml" in fu or "/generated_feeds/yijing" in fu:
+        return "yijinglab.com"
+
     p = urlparse(feed_url or "")
     host = (p.netloc or "").split("@")[-1].lower()
     if host.startswith("www."):
@@ -376,7 +393,13 @@ def _source_bracket_label(author: str, source_type: str, feed_url: str) -> str:
         else:
             core = "未知公众号"
     else:
-        core = f"{host}网站" if host else "未知网站"
+        # 蚁景本地 RSS：固定展示 www（与产品约定一致）
+        if host == "yijinglab.com":
+            core = "www.yijinglab.com"
+        elif host:
+            core = f"{host}网站"
+        else:
+            core = "未知网站"
     return f"来源：{core}"
 
 
@@ -385,8 +408,25 @@ def fetch_feed(url):
     拉取 RSS：requests 拉正文再 feedparser 解析。
     FreeBuf 等对云主机/脚本常返回 405：使用浏览器级请求头，并对 /feed、/feed/、镜像 URL 依次重试。
     若 GitHub Actions 仍 405，可在 Secrets 设置 FREEBUF_RSS_MIRROR 为自建 RSSHub 等镜像完整地址。
+    支持 file:/// 本地路径（如 generated_feeds/yijinglab.xml）。
     """
-    from urllib.parse import urlparse
+    from urllib.parse import urlparse, unquote
+
+    if (url or "").startswith("file:"):
+        try:
+            raw = unquote(urlparse(url).path)
+            if sys.platform == "win32" and len(raw) >= 3 and raw[0] == "/" and raw[2] == ":":
+                raw = raw.lstrip("/")
+            p = Path(raw)
+            if not p.is_file():
+                print(f"本地 feed 不存在: {p}", flush=True)
+                return []
+            text = p.read_text(encoding="utf-8", errors="replace")
+            d = feedparser.parse(text)
+            return d.entries if d.entries else []
+        except Exception as e:
+            print(f"读取本地 feed 失败 {url}: {e}", flush=True)
+            return []
 
     ua = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
