@@ -32,6 +32,7 @@ try:
     )
     from classifier import (
         classify,
+        major_incident_priority,
         REALTIME_CATEGORIES,
         TIMED_PUSH_CATEGORIES,
     )
@@ -47,7 +48,12 @@ except ImportError:
         SCHEDULED_WINDOW_MINUTES = 5
         POLL_HOURS_BEIJING = (6, 8, 12, 14, 18)
         POLL_WINDOW_MINUTES = 5
-        from classifier import classify, REALTIME_CATEGORIES, TIMED_PUSH_CATEGORIES
+        from classifier import (
+            classify,
+            major_incident_priority,
+            REALTIME_CATEGORIES,
+            TIMED_PUSH_CATEGORIES,
+        )
     else:
         print("请复制 config.example.py 为 config.py 并填写配置")
         sys.exit(1)
@@ -80,6 +86,7 @@ def init_db(conn):
             title TEXT,
             summary TEXT,
             category TEXT,
+            incident_priority TEXT,
             author TEXT,
             source_url TEXT,
             published_str TEXT,
@@ -96,6 +103,16 @@ def init_db(conn):
         );
     """)
     conn.commit()
+    _migrate_articles_schema(conn)
+
+
+def _migrate_articles_schema(conn):
+    """为旧库补充 incidents 优先级等列。"""
+    cur = conn.execute("PRAGMA table_info(articles)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "incident_priority" not in cols:
+        conn.execute("ALTER TABLE articles ADD COLUMN incident_priority TEXT")
+        conn.commit()
 
 
 def get_known_links(conn):
@@ -286,11 +303,11 @@ def _collect_realtime_to_push(conn, new_realtime, include_db_backlog):
     by_link = {item["link"]: item for item in new_realtime}
     ph = ",".join("?" * len(REALTIME_CATEGORIES))
     cur = conn.execute(
-        f"""SELECT link, title, published_str, category, author, source_url FROM articles
-           WHERE category IN ({ph}) AND link NOT IN (SELECT link FROM pushed)""",
+        f"""SELECT link, title, summary, published_str, category, author, source_url, incident_priority
+           FROM articles WHERE category IN ({ph}) AND link NOT IN (SELECT link FROM pushed)""",
         tuple(REALTIME_CATEGORIES),
     )
-    for link, title, ps, cat, author, su in cur.fetchall():
+    for link, title, summary, ps, cat, author, su, ip in cur.fetchall():
         if link in by_link:
             continue
         dt_bj = _parse_published_to_beijing(ps)
@@ -300,12 +317,14 @@ def _collect_realtime_to_push(conn, new_realtime, include_db_backlog):
         st = _source_type_for_feed_url(su)
         by_link[link] = {
             "title": title,
+            "summary": summary or "",
             "published_str": ps,
             "link": link,
             "category": cat,
             "author": author or "",
             "source_url": su,
             "source_type": st,
+            "incident_priority": ip,
         }
     return list(by_link.values())
 
@@ -505,6 +524,13 @@ CATEGORY_STYLE = {
 
 
 CATEGORY_ORDER = ["监管机构预警", "重大安全事件", "漏洞信息", "网安新闻资讯", "网安赛事资讯", "其他资讯"]
+
+# 重大安全事件推送行内展示的优先级（与 classifier.major_incident_priority 对应）
+_MAJOR_INCIDENT_PRIORITY_LABEL = {
+    "high": "🔴 高优先级",
+    "medium": "🟡 中优先级",
+    "low": "🟢 低优先级",
+}
 
 # 国家网络安全通报中心 + 重点防范 → 需抓取正文提取 IOC
 IOC_ALERT_AUTHOR = "国家网络安全通报中心"
@@ -772,7 +798,14 @@ def _build_single_category_content(category, items):
         src = _source_bracket_label(item.get("author") or "", st, feed_url)
         title_safe = (title or "").replace("]", "］").replace("[", "［")
         lines.append(f"[{title_safe}]({link})")
-        lines.append(f"> {time_str}（{src}）")
+        if category == "重大安全事件":
+            pri = item.get("incident_priority")
+            if pri not in ("high", "medium", "low"):
+                pri = major_incident_priority(full, item.get("summary") or "")
+            pri_t = _MAJOR_INCIDENT_PRIORITY_LABEL.get(pri, "🟢 低优先级")
+            lines.append(f"> {pri_t}　{time_str}（{src}）")
+        else:
+            lines.append(f"> {time_str}（{src}）")
         lines.append("")
     return "\n".join(lines).strip()
 
@@ -868,7 +901,7 @@ def is_scheduled_time():
 
 def main():
     # 1. 并行拉取所有源（8 个同时请求，大幅提速）
-    # all_new: (link, title, summary, category, author, feed_url, published_str, source_type)
+    # all_new: (link, title, summary, category, incident_priority, author, feed_url, published_str, source_type)
     all_new = []
 
     def fetch_one(feed_url, source_type):
@@ -888,8 +921,20 @@ def main():
                     summary = (entry.get("summary") or "")
                     author = get_author(entry)
                     published_str = format_published(entry)
-                    category = classify(author, title, summary, source_type)
-                    all_new.append((link, title, summary, category, author, feed_url, published_str, source_type))
+                    category, incident_priority = classify(author, title, summary, source_type)
+                    all_new.append(
+                        (
+                            link,
+                            title,
+                            summary,
+                            category,
+                            incident_priority,
+                            author,
+                            feed_url,
+                            published_str,
+                            source_type,
+                        )
+                    )
             except Exception as e:
                 url, st = futures[future]
                 print(f"拉取失败 {url}: {e}")
@@ -904,14 +949,14 @@ def main():
 
     new_realtime = []
     now_str = datetime.now().isoformat()
-    for link, title, summary, category, author, feed_url, published_str, source_type in all_new:
+    for link, title, summary, category, incident_priority, author, feed_url, published_str, source_type in all_new:
         if link in known:
             continue
         conn.execute(
             """INSERT OR IGNORE INTO articles
-               (link, title, summary, category, author, source_url, published_str, first_seen_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (link, title, summary, category, author, feed_url, published_str, now_str),
+               (link, title, summary, category, incident_priority, author, source_url, published_str, first_seen_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (link, title, summary, category, incident_priority, author, feed_url, published_str, now_str),
         )
         known.add(link)
         # 监管预警、重大事件→实时推送（公众号+网站均支持，以分类为准）
@@ -920,12 +965,14 @@ def main():
             if _realtime_should_queue_for_push(dt_bj):
                 new_realtime.append({
                     "title": title,
+                    "summary": summary or "",
                     "published_str": published_str,
                     "link": link,
                     "category": category,
                     "author": author or "",
                     "source_url": feed_url,
                     "source_type": source_type,
+                    "incident_priority": incident_priority,
                 })
 
     conn.commit()
