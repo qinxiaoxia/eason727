@@ -19,7 +19,6 @@ FEEDS = (
     [(u, t) for u, t in json.loads(_feeds_json)] if _feeds_json
     else [
         ("https://eason727.zeabur.app/feeds/all.atom", "wewe_rss"),
-        ("https://cybersecuritynews.com/feed/", "rss"),
         ("https://www.helpnetsecurity.com/feed/", "rss"),
         ("http://hackernews.cc/feed", "rss"),
         ("https://api.anquanke.com/data/v1/rss", "rss"),
