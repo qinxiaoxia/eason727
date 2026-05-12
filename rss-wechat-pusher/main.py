@@ -3,7 +3,7 @@
 RSS 推送到企业微信机器人
 - 静默：北京每天 20:00–次日 6:00 不推送（实时与定时均不推，拉取入库照常）
 - 实时两类（监管预警、重大事件）：北京 6、8、12、14、18 整点轮巡 + 9:30/15:30 定时同推；夜间发布的在次日 6:00 后非静默时段补推
-- 定时四类：9:30 档用「昨 15:30～今 9:30」时间窗（覆盖静默造成的缺口）；15:30 档与手动 --push-now 仅「今天」稿（北京日期）
+- 定时六类（漏洞/网安新闻/赛事/其他 + AI行业资讯 + AI与信息安全技术）：9:30 档用「昨 15:30～今 9:30」时间窗（覆盖静默造成的缺口）；15:30 档与手动 --push-now 仅「今天」稿（北京日期）
 - 去重：已写入 pushed 的链接不再推送
 - 全量：`--push-all-now`；临时含昨天：`--push-now --with-yesterday`
 """
@@ -278,7 +278,7 @@ def _is_polling_slot_beijing():
 def _get_run_mode():
     """
     poll: 轮巡，仅推送实时两类
-    scheduled: 定时，仅推送其余四类
+    scheduled: 定时，仅推送定时档六类（非实时两类）
     None: 不在窗口，仅拉取入库不推送
     环境变量 RSS_PUSH_MODE=poll 强制轮巡；scheduled 与 --push-now 在 main 中单独处理
     """
@@ -519,11 +519,22 @@ CATEGORY_STYLE = {
     "漏洞信息": "🐛",
     "网安新闻资讯": "📰",
     "网安赛事资讯": "🏆",
+    "AI行业资讯": "🤖",
+    "AI与信息安全技术": "🔗",
     "其他资讯": "📋",
 }
 
 
-CATEGORY_ORDER = ["监管机构预警", "重大安全事件", "漏洞信息", "网安新闻资讯", "网安赛事资讯", "其他资讯"]
+CATEGORY_ORDER = [
+    "监管机构预警",
+    "重大安全事件",
+    "漏洞信息",
+    "网安新闻资讯",
+    "网安赛事资讯",
+    "AI行业资讯",
+    "AI与信息安全技术",
+    "其他资讯",
+]
 
 # 重大安全事件推送行内展示的优先级（与 classifier.major_incident_priority 对应）
 _MAJOR_INCIDENT_PRIORITY_LABEL = {
@@ -994,7 +1005,7 @@ def main():
     if quiet_now:
         print("提示: 北京静默时段（20:00–次日 6:00），不执行任何推送（拉取与入库已完成）。")
 
-    # 2. 实时两类：轮巡 run；定时 9:30/15:30 run 也顺带推送（与四类同次执行，便于去掉紧邻的 10:00/16:00 轮巡）
+    # 2. 实时两类：轮巡 run；定时 9:30/15:30 run 也顺带推送（与定时档同次执行，便于去掉紧邻的 10:00/16:00 轮巡）
     #    或 --push-all-now 全量（静默时段不推）
     if not quiet_now and (mode == "poll" or mode == "scheduled" or force_push_all):
         realtime_items = _collect_realtime_to_push(conn, new_realtime, include_db_backlog=force_push_all)
@@ -1023,7 +1034,7 @@ def main():
         else:
             print(f"提示: 有 {len(new_realtime)} 条实时类文章已入库，当前非轮巡/定时时段，将在 6/8/12/14/18 整点轮巡或 9:30/15:30 定时中推送")
 
-    # 3. 定时四类：9:30（含缺口窗）/ 15:30（仅今天）或强制汇总；静默时段不推
+    # 3. 定时档：原四类 + AI 两类（9:30 时间窗 / 15:30 当天）或强制汇总；静默时段不推
     slot = _get_scheduled_slot()
     if (
         not quiet_now
@@ -1036,7 +1047,7 @@ def main():
             tuple(TIMED_PUSH_CATEGORIES),
         )
         rows = cur.fetchall()
-        # --push-now --with-yesterday：临时把定时四类扩到「今天或昨天」（北京），不沿用 9:30 时间窗
+        # --push-now --with-yesterday：临时把定时档六类扩到「今天或昨天」（北京），不沿用 9:30 时间窗
         if force_timed_digest and include_yesterday:
             rows = [
                 (l, t, ps, c, a, su)
@@ -1075,7 +1086,7 @@ def main():
             hint = "（含昨天）" if include_yesterday else ""
             print(f"定时推送: 0 条{hint}（无待推送文章，可能已推送过）")
     elif mode is None and not new_realtime and not quiet_now:
-        print("提示: 当前不在轮巡时段(北京 6/8/12/14/18 整点) 或 定时档(9:30/15:30)；实时两类在轮巡/定时；其余四类在定时。使用 python main.py --push-now 仅推四类，或 python main.py --push-all-now 全量推送。")
+        print("提示: 当前不在轮巡时段(北京 6/8/12/14/18 整点) 或 定时档(9:30/15:30)；实时两类在轮巡/定时；定时档六类在 9:30/15:30。使用 python main.py --push-now 仅推定时档，或 python main.py --push-all-now 全量推送。")
 
     conn.close()
     print("完成")

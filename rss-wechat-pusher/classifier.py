@@ -1,13 +1,14 @@
 """
-文章分类器（共 6 类）
+文章分类器（共 8 类）
 
 【监管机构预警 | Security Advisory】规则命中（不走 LLM）
 【漏洞信息 | Vulnerability】【重大安全事件 | Security Incident】【网安新闻资讯 | Industry News】
-【网安赛事资讯 | CTF/Competition】【其他资讯 | Other】—— **默认全部由 LLM 分类**；仅当未配置 LLM 或调用失败时，用关键词兜底。
+【网安赛事资讯 | CTF/Competition】【AI行业资讯】【AI与信息安全技术】【其他资讯 | Other】
+—— **默认全部由 LLM 分类**；仅当未配置 LLM 或调用失败时，用关键词兜底。
 
-优先级（冲突时）：重大安全事件 > 监管机构预警(规则) > 漏洞信息 > 网安赛事资讯 > 网安新闻资讯 > 其他资讯
+优先级（冲突时）：重大安全事件 > 监管机构预警(规则) > 漏洞信息 > 网安赛事资讯 > AI与信息安全技术 > AI行业资讯 > 网安新闻资讯 > 其他资讯
 
-实时两类仅轮巡；其余四类仅定时档。详见 _CLASSIFICATION_CRITERIA。
+实时两类仅轮巡；定时档含原四类 + AI 两类。详见 _CLASSIFICATION_CRITERIA。
 classify() 返回 (类别, incident_priority)；incident_priority 仅「重大安全事件」为 high/medium/low，其余为 None。
 """
 import re
@@ -16,12 +17,36 @@ from typing import Optional, Tuple
 # 实时推送类别（仅在轮巡 run 中推送，见 main.py _get_run_mode）
 REALTIME_CATEGORIES = {"监管机构预警", "重大安全事件"}
 
-# 定时推送类别（仅 9:30 / 15:30 北京汇总推送，不含上面两类）
-ALL_CATEGORIES = ["监管机构预警", "重大安全事件", "漏洞信息", "网安新闻资讯", "网安赛事资讯", "其他资讯"]
-TIMED_PUSH_CATEGORIES = {"漏洞信息", "网安新闻资讯", "网安赛事资讯", "其他资讯"}
+# 定时推送类别（仅 9:30 / 15:30 北京汇总推送，不含实时两类）
+ALL_CATEGORIES = [
+    "监管机构预警",
+    "重大安全事件",
+    "漏洞信息",
+    "网安新闻资讯",
+    "网安赛事资讯",
+    "AI行业资讯",
+    "AI与信息安全技术",
+    "其他资讯",
+]
+TIMED_PUSH_CATEGORIES = {
+    "漏洞信息",
+    "网安新闻资讯",
+    "网安赛事资讯",
+    "其他资讯",
+    "AI行业资讯",
+    "AI与信息安全技术",
+}
 
-# 大模型可选分类（不含「监管机构预警」，该类仅规则命中）
-LLM_CATEGORIES = ["漏洞信息", "重大安全事件", "网安新闻资讯", "网安赛事资讯", "其他资讯"]
+# 大模型可选分类（不含「监管机构预警」，该类仅规则命中）；长名优先用于解析
+LLM_CATEGORIES = [
+    "重大安全事件",
+    "漏洞信息",
+    "网安赛事资讯",
+    "AI与信息安全技术",
+    "AI行业资讯",
+    "网安新闻资讯",
+    "其他资讯",
+]
 
 # 监管机构预警规则：(作者/公众号名, 标题判断函数)
 ALERT_RULES = [
@@ -32,12 +57,136 @@ ALERT_RULES = [
 # LLM 输出英文标签 → 中文类名（用于解析；不含 other，避免匹配 another 等）
 _EN_LABEL_TO_CN = (
     ("security incident", "重大安全事件"),
+    ("ai & information security", "AI与信息安全技术"),
+    ("ai and information security", "AI与信息安全技术"),
+    ("ai infosec", "AI与信息安全技术"),
+    ("ai industry news", "AI行业资讯"),
+    ("ai industry", "AI行业资讯"),
     ("vulnerability", "漏洞信息"),
     ("industry news", "网安新闻资讯"),
     ("ctf/competition", "网安赛事资讯"),
     ("competition", "网安赛事资讯"),
     ("ctf", "网安赛事资讯"),
 )
+
+
+# ---------- AI 两类：关键词兜底（无 LLM 时）----------
+
+_AI_INDUSTRY_TIER1 = re.compile(
+    r"(发布|上线|开源|公测|商用|突破|SOTA|超越|替代|暂停|下线|封禁|"
+    r"监管|立法|合规|禁令|指南|行政令|白宫|国会|网信办|发改委|欧盟|"
+    r"\blaunch\b|\brelease\b|open[\s-]?source|general\s+availability|\bGA\b|"
+    r"breakthrough|benchmark|\bSOTA\b|deprecate|\bban\b|"
+    r"regulation|legislation|compliance|executive\s+order|white\s+house|\bEU\b|\bFTC\b)",
+    re.I,
+)
+
+_AI_INDUSTRY_TIER2 = re.compile(
+    r"(GPT-?5|GPT-?4|Claude|Gemini|Llama|多模态|大模型|基座模型|Scaling\s*Law|AGI|"
+    r"Agent|智能体|Copilot|\bRAG\b|具身智能|自动驾驶|AIGC|文生图|视频生成|"
+    r"算力|芯片|英伟达|\bH100\b|ASIC|数据中心|液冷|云计算)",
+    re.I,
+)
+
+_AI_INDUSTRY_INTERFERE = re.compile(
+    r"(赋能|重塑|颠覆|机遇|挑战|沙龙|峰会|圆满落幕|干货满满|诚邀|报名|白皮书下载|"
+    r"入门|教程|十分钟看懂|小白必看|是什么|有哪些|(?<!年度)盘点|"
+    r"回顾|总结|展望|"
+    r"融资|IPO|上市|并购|收购|独角兽|投资|估值|财报|营收|亏损|裁员|重组|"
+    r"\bfunding\b|\bIPO\b|\bM&A\b|\bacquisition\b|\bunicorn\b|\bvaluation\b|\brevenue\b|\blayoff\b)",
+    re.I,
+)
+
+_AI_AUTHORITY = re.compile(
+    r"(人民日报|新华社|新华网|央视新闻|人民网|澎湃新闻|财新|第一财经|经济观察报|"
+    r"36氪|钛媒体|品玩|机器之心|量子位|InfoQ|华尔街见闻|中国新闻网|光明日报|"
+    r"经济参考报|中国日报|欧盟委员会|白宫|美国国会|"
+    r"TechCrunch|Reuters|Bloomberg|The\s+Verge|Ars\s+Technica|MIT\s+Technology\s+Review|"
+    r"Wall\s+Street\s+Journal|\bWSJ\b|Financial\s+Times|\bFT\b|"
+    r"The\s+Information|Wired|Nature|Science\b)",
+    re.I,
+)
+
+
+def _ai_industry_interfere_dominant(blob: str) -> bool:
+    """干扰词密集且缺少一级触发 → 不作为 AI 行业资讯兜底。"""
+    if _AI_INDUSTRY_TIER1.search(blob):
+        return False
+    hits = len(_AI_INDUSTRY_INTERFERE.findall(blob))
+    return hits >= 3
+
+
+def _classify_ai_industry_keywords(author: str, blob: str) -> bool:
+    """
+    【AI行业资讯】兜底：须至少一级触发词 + 权威媒体/机构来源线索；
+    若全文主要由干扰词构成且无一级触发，不命中。
+    """
+    if _ai_industry_interfere_dominant(blob):
+        return False
+    if not _AI_INDUSTRY_TIER1.search(blob):
+        return False
+    head = f"{author or ''}\n{blob}"[:2400]
+    if not _AI_AUTHORITY.search(head):
+        return False
+    return True
+
+
+_AI_TECH_MARK = re.compile(
+    r"(GPT|Claude|Gemini|Llama|\bLLM\b|大模型|多模态|生成式|AIGC|Agent|智能体|"
+    r"\bRAG\b|Copilot|基座模型|Scaling|AGI|文生图|视频生成|Sora|OpenAI|Anthropic|"
+    r"DeepSeek|通义|文心|豆包|向量数据库|embedding|Transformers|"
+    r"提示词|Prompt\s*Injection|Jailbreak|越狱|对抗样本|Deepfake|深伪|"
+    r"语音克隆|人脸伪造|数据投毒|Model\s*Stealing|Model\s*Extraction|"
+    r"Membership\s*Inference|后门攻击|RLHF|幻觉|对齐|宪法AI|Guardrails|水印|"
+    r"OWASP.*LLM|CVE-\d{4}-\d{4,8}.*\b(LLM|GPT|model|AI)\b)",
+    re.I,
+)
+
+_SEC_MARK = re.compile(
+    r"(安全|信息安全|网络安全|攻击|漏洞|威胁|恶意|勒索|钓鱼|入侵|渗透|红队|"
+    r"后门|泄露|隐私|合规|GDPR|CCPA|病毒|木马|杀毒|攻防|"
+    r"malware|ransomware|phishing|breach|vulnerability|exploit|"
+    r"Threat\s*Detection|Anomaly\s*Detection|SOAR|\bSOC\b|\bXDR\b|"
+    r"Fuzzing|供应链安全|态势感知|代码审计)",
+    re.I,
+)
+
+_AI_SEC_ANCHOR = re.compile(
+    r"(生成恶意代码|编写病毒|绕过杀毒|制作钓鱼邮件|深伪|Deepfake|语音克隆|人脸伪造|验证码破解|"
+    r"提示词注入|Prompt\s*Injection|越狱攻击|\bJailbreak\b|数据投毒|Data\s*Poisoning|"
+    r"对抗样本|Adversarial|模型窃取|Model\s*Stealing|Model\s*Extraction|成员推断|Membership\s*Inference|"
+    r"后门攻击|威胁检测|异常行为分析|\bSOAR\b|自动化响应|\bSOC\b|\bXDR\b|态势感知|"
+    r"AI辅助代码审计|漏洞挖掘|模糊测试|供应链安全扫描|"
+    r"红队|Red\s*Teaming|渗透测试|幻觉.*利用|RLHF攻击|梯度泄露|模型反演|Model\s*Inversion|"
+    r"对齐|RLHF|宪法AI|Constitutional\s*AI|水印|Watermarking|护栏|Guardrails|RAG安全|向量数据库泄露|"
+    r"隐私计算|联邦学习安全|差分隐私|数据脱敏|"
+    r"DEFCON\s+AI|AI\s+Village|Black\s+Hat|RSA\s+Conference|OWASP\s+Top\s*10\s+for\s+LLM|"
+    r"WormGPT|FraudGPT|Palo\s+Alto|CrowdStrike|Mandiant)",
+    re.I,
+)
+
+_AI_SEC_EXCLUDE = re.compile(
+    r"(SQL注入|XSS(跨站)?|跨站脚本|\bDDoS\b|防火墙配置|VPN漏洞)(?!.{0,80}(GPT|LLM|大模型|生成式|AI|模型|智能体))",
+    re.I,
+)
+
+_AI_ENTERTAIN = re.compile(
+    r"(AI画画|AI绘画|AI写小说|换脸娱乐|AI换脸(?!.{0,40}(隐私|泄露|诈骗|安全)))",
+    re.I,
+)
+
+
+def _classify_ai_security_keywords(blob: str, low: str) -> bool:
+    """【AI与信息安全技术】：须 AI 与安全的直接交集，排除纯传统安全或纯娱乐。"""
+    if _AI_ENTERTAIN.search(blob) and not _SEC_MARK.search(blob):
+        return False
+    if _AI_SEC_EXCLUDE.search(blob) and not _AI_TECH_MARK.search(blob):
+        return False
+    if _AI_SEC_ANCHOR.search(blob):
+        return True
+    if _AI_TECH_MARK.search(blob) and _SEC_MARK.search(blob):
+        return True
+    return False
 
 
 def _blob_excludes_confirmed_major_incident(blob: str) -> bool:
@@ -299,47 +448,52 @@ def major_incident_priority(title: str, summary: Optional[str] = None) -> str:
     return "low"
 
 
-# 写入 Prompt：六类定义 + 流程 + 输出格式（与业务文档对齐）
+# 写入 Prompt：八类定义 + 流程 + 输出格式
 _CLASSIFICATION_CRITERIA = """
-你必须在下列五类中**只选一个**（监管机构预警由规则判定，你**不要**输出该类；除此五类外**没有**关键词预审，以你本行输出为准）：
-漏洞信息、重大安全事件、网安新闻资讯、网安赛事资讯、其他资讯
+你必须在下列七类中**只选一个**（监管机构预警由规则判定，你**不要**输出该类；以你本行输出为准）：
+漏洞信息、重大安全事件、网安新闻资讯、网安赛事资讯、AI行业资讯、AI与信息安全技术、其他资讯
 
-【六类定义摘要】
+【八类定义摘要】
 1. 【监管机构预警 | Security Advisory】（你不用输出）：国家网络安全通报中心+标题「重点防范」开头；或 CNCERT+「关于」开头且含「风险提示」。
-2. 【漏洞信息 | Vulnerability】：具体软件/系统漏洞详情，含 CVE、CVSS、受影响版本、修复补丁等**技术参数**；**仅**以漏洞技术细节为主、**非**已发生安全事件报道。
-   关键词：漏洞, CVE, vulnerability, RCE, buffer overflow, privilege escalation, 0day, POC, CVSS, exploit
-3. 【重大安全事件 | Security Incident】（门槛高，对齐「分级判断」中的**已发生且已确认**的实害事件）：
-   **必须同时满足**：（a）**已发生且已确认**的实质性攻击或泄露（非未遂、非安全演练/演习、非仅预警、非纯理论分析、非未经证实的传闻）；（b）有**可验证的实质影响**（数据泄露、系统入侵、服务中断、勒索得逞等）。
-   **优先关注**对中国企事业单位、在华业务或国内关键基础设施有直接影响的实害事件。
-   **典型归入本类**：大规模数据泄露（常带百万级用户/条记录规模或敏感数据）、关键设施/政府/大型组织核心系统被入侵或勒索**已证实**、已证实的长时间大范围服务中断等。
-   **不要**归入：潜在风险、未遂、演练、仅发预警无实害、工具/漏洞新闻综述、厂商敦促更新、科普指南、行业趋势稿、「声称/网传/未经证实」为主的消息。
-   英文参考：confirmed data breach at scale; verified ransomware hitting city/government/major org; widespread confirmed outage（非单纯 CVE 通告）。
-4. 【网安新闻资讯 | Industry News】：行业动态、趋势、政策解读、市场分析、威胁综述、工具/漏洞曝光新闻稿等（**未强调单一已发生的大规模实害事件**）。
-   关键词：发布, 趋势, 动态, 解读, 报告, release, trend, announcement, market analysis, industry report, whitepaper
-5. 【网安赛事资讯 | CTF/Competition】：CTF、护网、HVV、攻防演练赛、竞赛、Hackathon、红蓝对抗（作赛事/演练活动报道）。
-   关键词：CTF, 护网, HVV, 攻防演练, competition, contest, red-blue team, drill, hackathon
-6. 【其他资讯 | Other】：无法归入以上者；科普、教程、工具、招聘等。
-   关键词：科普, 教程, 工具, 招聘, tutorial, guide, course, tool, job, hiring
+2. 【重大安全事件 | Security Incident】（门槛高）：**已发生且已确认**的实害 + **可验证的实质影响**（泄露、入侵、中断、勒索得逞等）；排除未遂/演练/仅预警/传闻/纯理论。
+3. 【AI与信息安全技术 | AI & InfoSec】：**仅当**不能优先归入「漏洞信息」或「网安赛事资讯」时选用。须为 **AI 技术与网络安全/信息安全的直接交集**（二者缺一不归本类）。典型：
+   - 利用 AI 发起的新型攻击（LLM 写勒索软件、Deepfake/语音克隆诈骗等）。
+   - AI 系统被攻击或风险叙事（提示词注入、越狱、数据投毒、对抗样本、模型窃取等）**且非**以 CVE/CVSS/补丁通告为主体。
+   - 利用 AI 提升安全能力的方法论/架构（非单一 CVE 列表）。
+   **硬规则**：凡**可归入**漏洞信息（含 LLM/Agent/RAG 相关 **CVE、安全公告、CVSS、受影响版本、补丁** 为主）或可归入网安赛事资讯（**CTF/HVV/竞赛/护网赛/黑客松**等赛事语境）的，**必须**归入那两类，**禁止**归入本类。
+   **排除**：仅传统漏洞且无 AI；纯 AI 娱乐无安全风险叙述。
+4. 【漏洞信息 | Vulnerability】：**凡**以 CVE/CVSS/补丁/受影响版本/厂商安全通告**技术细节为主**的稿件（**包括**大模型、Agent、RAG、插件供应链等相关漏洞），**一律**归本类，**不归** AI与信息安全技术。已证实大规模实害且非单纯通告 → 重大安全事件。
+5. 【网安赛事资讯 | CTF/Competition】：**凡**以 CTF、护网、HVV、竞赛、Hackathon、解题赛、赛题、writeup、作**赛事/演练活动报道**的红蓝对抗为主线的，**一律**归本类（**含**「AI 安全」主题的赛），**不归** AI与信息安全技术。
+6. 【AI行业资讯 | AI Industry News】：**仅当**不能归入漏洞信息、网安赛事、重大安全事件时选用。须同时满足：
+   - **至少一个一级触发词**（技术与产品：发布/上线/开源/公测/商用/突破/SOTA/超越/替代/暂停/下线/封禁及英译 Launch/Release/Open-source/GA/Breakthrough/Benchmark/SOTA/Deprecate/Ban 等；政策与宏观：监管/立法/合规/禁令/指南/白宫/国会/网信办/发改委/欧盟/行政令及 Regulation/Legislation/Compliance/Executive Order/FTC 等）。
+   - **来源为权威媒体或主流科技/财经媒体**（作者、署名、转载来源；如新华社、澎湃、财新、36氪、机器之心、量子位、TechCrunch、Reuters、Bloomberg、The Verge、MIT Technology Review 等）。
+   - **二级触发词**为加分项（GPT/Claude、大模型、Agent、RAG、算力、英伟达等）。
+   **硬规则**：若内容**可归入**漏洞信息或网安赛事资讯，**必须**归入该两类，**不归**本类。
+   **排除/降权**：营销软文腔、低质科普、**仅**资本动态无一一级触发词、简单转载无新增信息。
+7. 【网安新闻资讯 | Industry News】：其余网安动态、趋势、政策解读、威胁综述等。
+8. 【其他资讯 | Other】：无法归入以上者。
 
-【分类优先级】重大安全事件 > 漏洞信息 > 网安赛事资讯 > 网安新闻资讯 > 其他资讯
-（监管机构预警不由你输出。）
+【分类优先级】（冲突时从高到低；监管机构不由你输出）
+重大安全事件 > 漏洞信息 > 网安赛事资讯 > AI与信息安全技术 > AI行业资讯 > 网安新闻资讯 > 其他资讯
+若**既有**重大实害**又**涉及 AI，**优先**重大安全事件。凡能匹配漏洞信息或网安赛事资讯定义者，**即使**全文涉及 AI，也**不得**标为 AI与信息安全技术或 AI行业资讯。
 
 【分类流程】
-1. 先判断是否**已发生的、大规模或高影响的实害安全事件**（如大规模用户数据泄露、市政/交通系统遭勒索入侵已证实等）→ 重大安全事件。
-2. 若仅为 CVE/补丁/技术参数、或厂商更新建议、或行业新闻/分析 → **不要**标重大安全事件。
-3. 再判断是否**漏洞技术通告**（CVE/CVSS/补丁/受影响版本为主）→ 漏洞信息。
-4. 再判赛事/演练、行业新闻、其他。
+1. 是否已证实的大规模/高影响实害安全事件 → 重大安全事件。
+2. 是否**以漏洞技术通告为主**（含 LLM/模型相关 CVE/公告/CVSS/补丁）→ **漏洞信息**。
+3. 是否**赛事/HVV/CTF/竞赛/黑客松**等语境（含 AI 安全赛）→ **网安赛事资讯**。
+4. 在上述均不适用时，是否 **AI 技术与信息安全的交集**（非通告体、非赛事项）→ AI与信息安全技术。
+5. 是否 **一级触发词 + 权威来源** 的 AI 产业重磅（且非 2/3/4）→ AI行业资讯。
+6. 其余 → 网安新闻资讯；再不行 → 其他资讯。
 
-【重要】⚠️ 「重大安全事件」= 高优先级实害事件的子集：须**已发生+已确认**，有**实质影响**；中低优先级或「仅建议关注」的有限影响事件，若不符合「已确认大规模/关键设施实害」，应归**网安新闻资讯**或**其他资讯**。
-⚠️ 标题含「泄露/勒索/攻击」但实为资讯、预警、传闻、未遂、演练 → **网安新闻资讯**等，勿标重大安全事件。
-⚠️ CVE：以技术通告为主 → **漏洞信息**；以**已利用且造成大规模确认事件**为主 → 重大安全事件。
+【重要】⚠️ 标题含「泄露/勒索/攻击」但实为资讯、预警、传闻、未遂、演练 → **勿**标重大安全事件。
+⚠️ **CVE/安全公告体** → **漏洞信息**；**已利用且大规模确认实害** → 重大安全事件；**非通告、非赛事**的 AI∩安全叙事/防护架构 → AI与信息安全技术。
 
 【输出格式】**仅一行**，不要解释、不要加前后缀：
 - 若 **不是** 重大安全事件：【中文分类名 | English Name】
-  例如：【漏洞信息 | Vulnerability】
-- 若 **是** 重大安全事件：**必须**带上第三段优先级（三选一：高优先级、中优先级、低优先级，对齐前述分级标准）：
+  例如：【AI行业资讯 | AI Industry News】、【AI与信息安全技术 | AI & InfoSec】、【漏洞信息 | Vulnerability】
+- 若 **是** 重大安全事件：**必须**第三段优先级：
   【重大安全事件 | Security Incident | 高优先级】
-- 兼容旧版：仅输出五个中文词之一（不含优先级）时，系统会再向模型追问优先级。
+- 兼容旧版：仅输出中文类名（不含优先级）时，重大安全事件会再追问优先级。
 """
 
 
@@ -353,20 +507,21 @@ def classify_by_rules(author: str, title: str, source_type: str) -> Optional[str
     return None
 
 
-def classify_by_keywords(title: str, summary: str) -> Optional[str]:
+def classify_by_keywords(author: str, title: str, summary: str) -> Optional[str]:
     """
     关键词兜底（仅无 LLM 或 LLM 分类失败时使用）。顺序与业务优先级一致：
-    重大安全事件 → 网安赛事 → CVE/漏洞 → 行业新闻
+    重大安全事件 → 网安赛事 → CVE/漏洞 → AI与信息安全技术 → AI行业资讯 → 网安新闻
+    （漏洞信息、网安赛事资讯 优先于两个 AI 类。）
     """
     blob = f"{title or ''}\n{summary or ''}"[:2400]
     low = blob.lower()
 
-    # 1) 重大安全事件（先于赛事与 CVE）
+    # 1) 重大安全事件
     if not _blob_excludes_confirmed_major_incident(blob):
         if _major_incident_blob_heuristic(blob, low):
             return "重大安全事件"
 
-    # 2) 网安赛事资讯（CTF/护网/HVV/攻防演练作赛事语境）
+    # 2) 网安赛事资讯（优先于 AI∩安全、AI 行业）
     if re.search(
         r"(\bctf\b|ctf[杯赛战]|攻防演练|护网20\d{2}|护网行动|实网攻防|awd赛|红队演练|红蓝对抗"
         r"|安全竞赛|解题赛|赛题|writeup|题解|\bwp\b|技能大赛|极客挑战|强网杯|\bhvv\b"
@@ -376,7 +531,7 @@ def classify_by_keywords(title: str, summary: str) -> Optional[str]:
     ):
         return "网安赛事资讯"
 
-    # 3) CVE/CNNVD：重大须「强证据」；行业新闻口吻 → 漏洞信息；其余交给后续关键词或 LLM
+    # 3) CVE/CNNVD → 漏洞信息或重大（不落入 AI∩安全，与 LLM 规则一致）
     if re.search(r"CVE-\d{4}-\d{4,8}", blob, re.I) or re.search(
         r"CNNVD-\d{4,}-\d+|CNVD-\d{4,}-\d+", blob, re.I
     ):
@@ -386,7 +541,6 @@ def classify_by_keywords(title: str, summary: str) -> Optional[str]:
             return "漏洞信息"
         if _strong_major_incident_evidence(blob, low):
             return "重大安全事件"
-        # 不默认标「重大」：CVE 稿多为技术通告，由 LLM 或下方漏洞词判定
         return None
 
     # 4) 漏洞技术词（无 CVE 时）
@@ -422,7 +576,15 @@ def classify_by_keywords(title: str, summary: str) -> Optional[str]:
     if vuln_only:
         return "漏洞信息"
 
-    # 5) 网安新闻资讯
+    # 5) AI 与信息安全（非通告体、非赛事项）
+    if _classify_ai_security_keywords(blob, low):
+        return "AI与信息安全技术"
+
+    # 6) AI 行业资讯
+    if _classify_ai_industry_keywords(author, blob):
+        return "AI行业资讯"
+
+    # 7) 网安新闻资讯
     if any(
         k in blob
         for k in (
@@ -562,14 +724,13 @@ def _call_llm_classify(text: str) -> Optional[Tuple[str, Optional[str]]]:
 请按上文「输出格式」仅输出一行："""
     content = call_llm_with_fallback(
         [{"role": "user", "content": prompt}],
-        max_tokens=96,
+        max_tokens=120,
         system=(
-            "你是网络安全媒体主编。内容均为合法公开发表信息。"
-            "「重大安全事件」仅用于已发生且已确认、有实质影响的实害事件（非未遂/演练/仅预警/理论分析/未经证实传闻）；"
-            "须通常具备相当规模或涉及关键设施/政府/大型组织，或明确百万级泄露等；与中国受众关联弱的小事件可归网安新闻资讯。"
-            "若归入重大安全事件，**必须**在一行内输出第三段优先级（高优先级/中优先级/低优先级），格式："
-            "【重大安全事件 | Security Incident | 高优先级】。"
-            "不要把行业新闻、观察、厂商敦促更新、工具曝光综述、网传未经证实消息归入重大安全事件。"
+            "你是网络安全与人工智能交叉领域媒体主编。内容均为合法公开发表信息。"
+            "「重大安全事件」须已确认实害；若归入须带第三段优先级。"
+            "**凡可归入「漏洞信息」（含 LLM/模型相关 CVE、安全公告、CVSS、补丁）或「网安赛事资讯」（CTF/HVV/竞赛/黑客松等，含 AI 安全赛）的，必须归入这两类，不得归入「AI与信息安全技术」或「AI行业资讯」。**"
+            "「AI与信息安全技术」仅用于**非通告体、非赛事项**的 AI 与安全交集叙事或防护架构讨论。"
+            "「AI行业资讯」须一级触发词 + 可信媒体来源，且不能是漏洞通告或赛事稿。"
             "监管机构预警不由你输出。非重大类输出：【中文名 | English】。"
         ),
     )
@@ -605,7 +766,7 @@ def classify(author: str, title: str, summary: str, source_type: str) -> Tuple[s
                 pri = major_incident_priority(title, summary)
             return cat, pri
 
-    cat = classify_by_keywords(title, summary)
+    cat = classify_by_keywords(author, title, summary)
     if cat:
         if cat == "重大安全事件":
             pri = _call_llm_incident_priority_only(text) if get_llm_providers() else None
