@@ -379,6 +379,40 @@ def _source_type_for_feed_url(feed_url: str) -> str:
     return "rss"
 
 
+# RSS 源误用本机绑定地址时（如 hackernews.cc 输出 http://0.0.0.0:8080/post/...），企业微信 markdown 链接会失效
+_BAD_ENTRY_LINK_HOSTS = frozenset({"0.0.0.0", "127.0.0.1", "localhost", "::1"})
+
+
+def _normalize_entry_link(link: str, feed_url: str) -> str:
+    """
+    将条目 link 规范为可点击的公网 URL。
+    部分站点 RSS 生成器使用 0.0.0.0:端口 等内网地址，需用订阅 feed 的域名替换 host。
+    """
+    from urllib.parse import urlparse, urlunparse, urljoin
+
+    s = (link or "").strip()
+    if not s:
+        return s
+    fp = urlparse(feed_url or "")
+    pub_scheme = fp.scheme if fp.scheme in ("http", "https") else "https"
+    pub_netloc = fp.netloc
+    if not pub_netloc:
+        return s
+
+    lp = urlparse(s)
+    if not lp.scheme and not lp.netloc:
+        return urljoin(f"{pub_scheme}://{pub_netloc}/", s)
+
+    host = (lp.hostname or "").lower()
+    if host not in _BAD_ENTRY_LINK_HOSTS:
+        return s
+
+    fixed = urlunparse((pub_scheme, pub_netloc, lp.path or "/", lp.params, lp.query, lp.fragment))
+    if fixed != s:
+        print(f"链接已修正 ({pub_netloc}): {s[:80]} -> {fixed[:80]}", flush=True)
+    return fixed
+
+
 def _hostname_from_feed(feed_url: str) -> str:
     """RSS/Atom 页的域名，用于网站类来源展示。"""
     from urllib.parse import urlparse
@@ -925,7 +959,7 @@ def main():
             try:
                 items = future.result()
                 for feed_url, source_type, entry in items:
-                    link = entry.get("link")
+                    link = _normalize_entry_link(entry.get("link") or "", feed_url)
                     if not link:
                         continue
                     title = (entry.get("title") or "").strip()
