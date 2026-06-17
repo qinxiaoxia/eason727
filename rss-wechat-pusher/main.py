@@ -8,6 +8,7 @@ RSS 推送到企业微信机器人
 - 全量：`--push-all-now`；临时含昨天：`--push-now --with-yesterday`
 """
 
+import json
 import os
 import re
 import sqlite3
@@ -618,8 +619,105 @@ def _is_meaningful_ip(ip):
     return True
 
 
-def _extract_iocs(text):
-    """从正文提取域名与 IP，尝试配对为 (恶意地址, 关联IP)，仅保留有效 IOC"""
+_IP_V4_RE = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}$")
+_DOMAIN_RE = re.compile(
+    r"^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9-]+)+$"
+)
+
+
+def _is_plausible_domain(value):
+    if not value or value == "-":
+        return False
+    if _IP_V4_RE.fullmatch(value):
+        return False
+    return bool(_DOMAIN_RE.fullmatch(value))
+
+
+def _normalize_ioc_pair(address, ip):
+    """校验并规范为 (恶意地址, 关联IP)。"""
+    address = (address or "").strip()
+    ip = (ip or "").strip()
+    if not address or address == "-":
+        if ip and _is_meaningful_ip(ip):
+            return ("", ip)
+        return None
+    if _IP_V4_RE.fullmatch(address):
+        if not _is_meaningful_ip(address):
+            return None
+        if ip and not _is_meaningful_ip(ip):
+            ip = ""
+        return (address, ip)
+    if _is_plausible_domain(address):
+        if ip and not _is_meaningful_ip(ip):
+            ip = ""
+        return (address, ip)
+    return None
+
+
+_IOC_LLM_SYSTEM = (
+    "你是网络安全 IOC 提取助手。从国家网络安全通报中心等机构发布的通报正文中，"
+    "按出现顺序提取每一条恶意 IOC。"
+    "每条包含 address（恶意地址/恶意网址，可为域名或 IPv4）和 ip（关联 IP；"
+    "若恶意地址本身即为 IP 且无单独关联 IP 字段，则 ip 留空字符串）。"
+    "只提取通报正文「恶意地址信息」列表中的 IOC，忽略归属地、病毒家族、描述等段落里的无关 IP。"
+    "只输出 JSON 数组，不要 markdown 或其它说明。格式示例："
+    '[{"address":"evil.example.com","ip":"1.2.3.4"},{"address":"5.6.7.8","ip":""}]'
+)
+
+
+def _parse_llm_ioc_response(content):
+    """解析 LLM 返回的 IOC JSON 数组。"""
+    if not content:
+        return []
+    raw = content.strip()
+    fence = re.search(r"```(?:json)?\s*(\[.*?\])\s*```", raw, re.DOTALL)
+    if fence:
+        raw = fence.group(1)
+    else:
+        bracket = re.search(r"(\[.*\])", raw, re.DOTALL)
+        if bracket:
+            raw = bracket.group(1)
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(data, list):
+        return []
+    pairs = []
+    seen = set()
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        address = item.get("address") or item.get("domain") or item.get("恶意地址") or ""
+        ip = item.get("ip") or item.get("关联IP") or item.get("关联ip") or ""
+        pair = _normalize_ioc_pair(address, ip)
+        if pair and pair not in seen:
+            seen.add(pair)
+            pairs.append(pair)
+    return pairs[:20]
+
+
+def _extract_iocs_by_llm(text, title=""):
+    """监管机构 IOC 通报：优先用大模型从正文结构化提取。"""
+    from llm_utils import call_llm_with_fallback, get_llm_providers
+
+    if not text or not get_llm_providers():
+        return []
+    body = text[:12000]
+    user = f"标题：{title}\n\n正文：\n{body}" if title else f"正文：\n{body}"
+    content = call_llm_with_fallback(
+        [{"role": "user", "content": user}],
+        max_tokens=1024,
+        system=_IOC_LLM_SYSTEM,
+    )
+    pairs = _parse_llm_ioc_response(content or "")
+    if pairs:
+        print(f"[LLM] IOC 提取成功: {len(pairs)} 条", flush=True)
+    return pairs
+
+
+def _extract_iocs_regex(text):
+    """正则兜底：从正文提取域名与 IP，尝试配对为 (恶意地址, 关联IP)。"""
     if not text:
         return []
     pairs = []
@@ -627,34 +725,48 @@ def _extract_iocs(text):
         r"(?:恶意地址|恶意网址|域名)[:：]\s*([^\s，。\n]+)\s*(?:关联IP(?:地址)?|恶意IP(?:地址)?)[:：]\s*([\d.]+)",
         text,
     ):
-        domain, ip = m.group(1).strip(), m.group(2).strip()
-        if domain and domain != "-" and ip and ip.count(".") == 3 and _is_meaningful_ip(ip):
-            pairs.append((domain, ip))
+        pair = _normalize_ioc_pair(m.group(1), m.group(2))
+        if pair:
+            pairs.append(pair)
+    if not pairs:
+        for m in re.finditer(
+            r"([a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9-]+)+)\s*\n(?:[^\n]*\n){0,8}?(\d{1,3}(?:\.\d{1,3}){3})\b",
+            text,
+        ):
+            pair = _normalize_ioc_pair(m.group(1), m.group(2))
+            if pair and pair not in pairs:
+                pairs.append(pair)
     if not pairs:
         for m in re.finditer(r"(?:恶意网址|恶意地址)[:：]\s*([^\s，。\n]+)", text):
-            domain = m.group(1).strip()
-            if domain and domain != "-":
-                pairs.append((domain, ""))
+            pair = _normalize_ioc_pair(m.group(1), "")
+            if pair:
+                pairs.append(pair)
         ips_only = [
             ip
             for ip in dict.fromkeys(re.findall(r"(?:恶意IP|关联IP)(?:地址)?[:：]\s*([\d.]+)", text))
-            if ip.count(".") == 3 and _is_meaningful_ip(ip)
+            if _is_meaningful_ip(ip)
         ]
         if pairs and ips_only:
-            for i, (d, _) in enumerate(pairs):
-                ip = ips_only[i] if i < len(ips_only) else ips_only[-1]
-                pairs[i] = (d, ip)
+            pairs = [
+                (d, ips_only[i] if i < len(ips_only) else ips_only[-1]) if not ip else (d, ip)
+                for i, (d, ip) in enumerate(pairs)
+            ]
         elif not pairs and ips_only:
             pairs = [("", ip) for ip in ips_only[:20]]
-    if not pairs:
-        domains = list(dict.fromkeys(re.findall(r"(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}", text)))
-        ips = list(dict.fromkeys(re.findall(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", text)))
-        for i in range(max(len(domains), len(ips))):
-            d = domains[i] if i < len(domains) else ""
-            ip = ips[i] if i < len(ips) else ""
-            if d and ip and _is_meaningful_ip(ip):
-                pairs.append((d, ip))
     return pairs[:20]
+
+
+def _extract_iocs(text, title=""):
+    """监管机构 IOC 通报：LLM 优先，失败或未配置时回退正则。"""
+    if not text:
+        return []
+    pairs = _extract_iocs_by_llm(text, title)
+    if pairs:
+        return pairs
+    pairs = _extract_iocs_regex(text)
+    if pairs:
+        print(f"[IOC] 正则兜底提取: {len(pairs)} 条", flush=True)
+    return pairs
 
 
 def _build_ioc_push_content(item):
@@ -671,7 +783,7 @@ def _build_ioc_push_content(item):
     link = item.get("link") or ""
     time_str = item.get("published_str") or ""
     text = _fetch_article_text(link)
-    pairs = _extract_iocs(text)
+    pairs = _extract_iocs(text, title)
     if not pairs:
         return None  # 无有效 IOC，用基础格式
     feed_url = item.get("source_url") or ""
@@ -1185,8 +1297,8 @@ def test_llm():
 
 
 # --test-ioc 默认用国家网络安全通报中心文章测试（可传自定义 URL）
-TEST_IOC_URL = "https://mp.weixin.qq.com/s/8Xg-BO7wswu8u95XAnkCCQ"
-TEST_IOC_TITLE = "OpenClaw安全风险预警"
+TEST_IOC_URL = "https://mp.weixin.qq.com/s/DeBK7x9fmAer3zfK4YQyFg"
+TEST_IOC_TITLE = "国家通报10个境外恶意网址和IP威胁网络安全"
 
 
 def test_ioc():
@@ -1196,6 +1308,11 @@ def test_ioc():
     title = TEST_IOC_TITLE
     item = {"title": title, "link": url, "published_str": "2026-03-13 18:38", "author": IOC_ALERT_AUTHOR}
     print(f"测试 IOC 提取: {url}")
+    text = _fetch_article_text(url)
+    pairs = _extract_iocs(text, title)
+    print(f"提取到 {len(pairs)} 条 IOC")
+    for i, p in enumerate(pairs, 1):
+        print(f"  {i}. {p}")
     content = _build_ioc_push_content(item)
     if content:
         print("--- 有有效 IOC，特殊格式 ---")
