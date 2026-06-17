@@ -40,6 +40,9 @@ jobs:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
           LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          # IOC 监管通报 @ 同事（可选）：WECHAT_IOC_MENTION_MOBILES / WECHAT_IOC_MENTION_SUFFIX
+          WECHAT_IOC_MENTION_MOBILES: ${{ secrets.WECHAT_IOC_MENTION_MOBILES }}
+          WECHAT_IOC_MENTION_SUFFIX: ${{ secrets.WECHAT_IOC_MENTION_SUFFIX }}
           # 可选：RSS_PUSH_MODE=poll|scheduled 强制本轮只跑轮巡或只跑定时；留空则按北京时间自动判断
           PUSH_SCHEDULED_NOW: ""
         run: |

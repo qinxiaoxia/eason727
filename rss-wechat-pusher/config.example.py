@@ -6,6 +6,26 @@ import os
 # 企业微信机器人 Webhook 地址（也可用环境变量 WECHAT_WEBHOOK）
 WECHAT_WEBHOOK = os.getenv("WECHAT_WEBHOOK") or "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
 
+# 国家网络安全通报中心 IOC 通报（含【相关IOC】特殊格式）推送时 @ 同事
+# 注意：群机器人不能靠正文写「@王旭阳」触发提醒，须填企业微信成员 userid 或手机号（向管理员查询）
+# GitHub Secrets 示例：WECHAT_IOC_MENTION_USERIDS=["WangXuYang"] 或逗号分隔 WangXuYang
+# 可选 WECHAT_IOC_MENTION_MOBILES=138xxxxxxxx（JSON 数组或逗号分隔）
+# 可选 WECHAT_IOC_MENTION_SUFFIX=@王旭阳（仅展示在消息末尾；真正提醒靠上面 userid/手机号）
+def _parse_str_list_env(name: str):
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return []
+    try:
+        v = json.loads(raw)
+        return [str(x).strip() for x in v if str(x).strip()]
+    except json.JSONDecodeError:
+        return [x.strip() for x in raw.split(",") if x.strip()]
+
+
+WECHAT_IOC_MENTION_USERIDS = _parse_str_list_env("WECHAT_IOC_MENTION_USERIDS")
+WECHAT_IOC_MENTION_MOBILES = _parse_str_list_env("WECHAT_IOC_MENTION_MOBILES")
+WECHAT_IOC_MENTION_SUFFIX = os.getenv("WECHAT_IOC_MENTION_SUFFIX") or ""
+
 # WeWe RSS 地址（用于识别公众号来源，规则分类仅对公众号生效）
 WEWE_RSS_URL = os.getenv("WEWE_RSS_URL") or "https://eason727.zeabur.app/feeds/all.atom"
 
