@@ -357,6 +357,29 @@ def format_published(entry):
     return ""
 
 
+def _lookup_entry_meta_from_feeds(link):
+    """按链接在已配置 RSS 源中查找条目元数据（测试/补推时用）。"""
+    link = (link or "").strip()
+    if not link:
+        return {}
+    for feed_url, source_type in FEEDS:
+        try:
+            d = feedparser.parse(feed_url)
+        except Exception:
+            continue
+        for entry in d.entries:
+            entry_link = _normalize_entry_link(getattr(entry, "link", "") or "", feed_url)
+            if entry_link == link or link in entry_link or entry_link in link:
+                return {
+                    "title": getattr(entry, "title", "") or "",
+                    "author": get_author(entry),
+                    "published_str": format_published(entry),
+                    "source_url": feed_url,
+                    "source_type": source_type,
+                }
+    return {}
+
+
 def get_author(entry):
     """从 entry 提取公众号/作者"""
     author = getattr(entry, "author", None)
@@ -1305,8 +1328,18 @@ def test_ioc():
     """用历史文章测试 IOC 提取。无有效 IOC 时按基础格式推送。"""
     idx = sys.argv.index("--test-ioc") + 1 if "--test-ioc" in sys.argv else -1
     url = sys.argv[idx] if idx > 0 and idx < len(sys.argv) and not sys.argv[idx].startswith("-") else TEST_IOC_URL
-    title = TEST_IOC_TITLE
-    item = {"title": title, "link": url, "published_str": "2026-03-13 18:38", "author": IOC_ALERT_AUTHOR}
+    meta = _lookup_entry_meta_from_feeds(url)
+    title = meta.get("title") or TEST_IOC_TITLE
+    item = {
+        "title": title,
+        "link": url,
+        "published_str": meta.get("published_str") or "",
+        "author": meta.get("author") or IOC_ALERT_AUTHOR,
+        "source_url": meta.get("source_url") or "",
+        "source_type": meta.get("source_type") or "wewe_rss",
+    }
+    if not item["published_str"]:
+        print("警告：RSS 未命中该链接，时间字段为空", flush=True)
     print(f"测试 IOC 提取: {url}")
     text = _fetch_article_text(url)
     pairs = _extract_iocs(text, title)
