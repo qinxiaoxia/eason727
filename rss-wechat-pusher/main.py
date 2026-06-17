@@ -657,45 +657,6 @@ def _extract_iocs(text):
     return pairs[:20]
 
 
-def _get_ioc_mention_config():
-    """IOC 监管通报推送 @ 人：userid / 手机号 / 文末展示后缀。"""
-    try:
-        from config import (
-            WECHAT_IOC_MENTION_USERIDS,
-            WECHAT_IOC_MENTION_MOBILES,
-            WECHAT_IOC_MENTION_SUFFIX,
-        )
-
-        userids = list(WECHAT_IOC_MENTION_USERIDS or [])
-        mobiles = list(WECHAT_IOC_MENTION_MOBILES or [])
-        suffix = (WECHAT_IOC_MENTION_SUFFIX or "").strip()
-    except ImportError:
-        import json
-
-        def _parse(name):
-            raw = (os.getenv(name) or "").strip()
-            if not raw:
-                return []
-            try:
-                return [str(x).strip() for x in json.loads(raw) if str(x).strip()]
-            except json.JSONDecodeError:
-                return [x.strip() for x in raw.split(",") if x.strip()]
-
-        userids = _parse("WECHAT_IOC_MENTION_USERIDS")
-        mobiles = _parse("WECHAT_IOC_MENTION_MOBILES")
-        suffix = (os.getenv("WECHAT_IOC_MENTION_SUFFIX") or "").strip()
-    return userids, mobiles, suffix
-
-
-def _append_ioc_mention_suffix(content: str) -> str:
-    _, _, suffix = _get_ioc_mention_config()
-    if not suffix:
-        return content
-    if suffix in content:
-        return content
-    return f"{content.rstrip()}\n\n{suffix}"
-
-
 def _build_ioc_push_content(item):
     """构建「重点防范」类文章的特殊格式（含 IOC）。若无有效 IOC 则返回 None，改用基础格式。"""
     title = item.get("title") or ""
@@ -940,14 +901,7 @@ def send_wechat_per_category(webhook, items_by_category):
                 time.sleep(0.3)
                 content = _build_ioc_push_content(item)
                 if content:
-                    uids, mobiles, _ = _get_ioc_mention_config()
-                    send_wechat(
-                        webhook,
-                        _append_ioc_mention_suffix(content),
-                        use_markdown=False,
-                        mentioned_userids=uids,
-                        mentioned_mobiles=mobiles,
-                    )
+                    send_wechat(webhook, content, use_markdown=False)
                 else:
                     normal_items.append(item)  # 无有效 IOC，并入基础格式
             items = normal_items
@@ -975,17 +929,9 @@ def _split_by_bytes(content, max_bytes):
     return chunks
 
 
-def send_wechat(
-    webhook,
-    content,
-    use_markdown=True,
-    mentioned_userids=None,
-    mentioned_mobiles=None,
-):
+def send_wechat(webhook, content, use_markdown=True):
     """发送到企业微信（按字节分片，单条间隔 0.3s 防限流）"""
     chunks = _split_by_bytes(content, MAX_CONTENT_BYTES)
-    uids = [u for u in (mentioned_userids or []) if u]
-    mobiles = [m for m in (mentioned_mobiles or []) if m]
 
     for i, chunk in enumerate(chunks):
         if i > 0:
@@ -993,14 +939,7 @@ def send_wechat(
         if use_markdown:
             payload = {"msgtype": "markdown", "markdown": {"content": chunk}}
         else:
-            text_body = {"content": chunk}
-            # @ 提醒仅附在最后一片，避免分片重复 @
-            if i == len(chunks) - 1:
-                if uids:
-                    text_body["mentioned_list"] = uids
-                if mobiles:
-                    text_body["mentioned_mobile_list"] = mobiles
-            payload = {"msgtype": "text", "text": text_body}
+            payload = {"msgtype": "text", "text": {"content": chunk}}
         try:
             r = requests.post(webhook, json=payload, timeout=10)
             r.raise_for_status()
