@@ -48,10 +48,52 @@ LLM_CATEGORIES = [
     "其他资讯",
 ]
 
-# 监管机构预警规则：(作者/公众号名, 标题判断函数)
+# 监管机构预警：作者子串 + 标题判定（规则优先，不走 LLM）
+_NCSC_ALERT_AUTHOR = "国家网络安全通报中心"
+_CNCERT_ALERT_AUTHOR = "国家互联网应急中心CNCERT"
+
+
+def ncsc_regulatory_title(title: str) -> bool:
+    """
+    国家网络安全通报中心常见预警标题形态（不限「重点防范」）。
+    例：重点防范… / 国家通报…恶意网址和IP… / 关于…风险提示…
+    """
+    t = (title or "").strip()
+    if not t:
+        return False
+    if t.startswith("重点防范"):
+        return True
+    if t.startswith("国家通报"):
+        return True
+    if "通报" in t and any(
+        k in t for k in ("恶意网址", "恶意地址", "恶意域名", "境外恶意", "恶意IP", "恶意 IP")
+    ):
+        return True
+    if t.startswith("关于") and any(
+        k in t for k in ("风险提示", "恶意网址", "恶意地址", "网络安全威胁", "境外恶意")
+    ):
+        return True
+    return False
+
+
+def cncert_regulatory_title(title: str) -> bool:
+    t = (title or "").strip()
+    return t.startswith("关于") and "风险提示" in t
+
+
+def is_regulatory_ioc_alert(author: str, title: str) -> bool:
+    """
+    宜抓取正文并尝试 IOC 特殊格式推送的监管机构稿件（国家网络安全通报中心）。
+    规则命中即尝试提取；无有效 IOC 时 main 会退回基础格式。
+    """
+    author = (author or "").strip()
+    title = (title or "").strip()
+    return _NCSC_ALERT_AUTHOR in author and ncsc_regulatory_title(title)
+
+
 ALERT_RULES = [
-    ("国家网络安全通报中心", lambda t: (t or "").strip().startswith("重点防范")),
-    ("国家互联网应急中心CNCERT", lambda t: (t or "").strip().startswith("关于") and "风险提示" in (t or "")),
+    (_NCSC_ALERT_AUTHOR, ncsc_regulatory_title),
+    (_CNCERT_ALERT_AUTHOR, cncert_regulatory_title),
 ]
 
 # LLM 输出英文标签 → 中文类名（用于解析；不含 other，避免匹配 another 等）
@@ -454,7 +496,7 @@ _CLASSIFICATION_CRITERIA = """
 漏洞信息、重大安全事件、网安新闻资讯、网安赛事资讯、AI行业资讯、AI与信息安全技术、其他资讯
 
 【八类定义摘要】
-1. 【监管机构预警 | Security Advisory】（你不用输出）：国家网络安全通报中心+标题「重点防范」开头；或 CNCERT+「关于」开头且含「风险提示」。
+1. 【监管机构预警 | Security Advisory】（你不用输出）：国家网络安全通报中心 + 标题为「重点防范」开头、「国家通报」开头、或通报类恶意网址/恶意IP/境外恶意等；CNCERT +「关于」开头且含「风险提示」。
 2. 【重大安全事件 | Security Incident】（门槛高）：**已发生且已确认**的实害 + **可验证的实质影响**（泄露、入侵、中断、勒索得逞等）；排除未遂/演练/仅预警/传闻/纯理论。
 3. 【AI与信息安全技术 | AI & InfoSec】：**仅当**不能优先归入「漏洞信息」或「网安赛事资讯」时选用。须为 **AI 技术与网络安全/信息安全的直接交集**（二者缺一不归本类）。典型：
    - 利用 AI 发起的新型攻击（LLM 写勒索软件、Deepfake/语音克隆诈骗等）。
@@ -515,6 +557,10 @@ def classify_by_keywords(author: str, title: str, summary: str) -> Optional[str]
     """
     blob = f"{title or ''}\n{summary or ''}"[:2400]
     low = blob.lower()
+
+    # 0) 监管机构预警（与 classify_by_rules 一致，防止 LLM 失败时漏判）
+    if classify_by_rules(author, title, "wewe_rss"):
+        return "监管机构预警"
 
     # 1) 重大安全事件
     if not _blob_excludes_confirmed_major_incident(blob):
@@ -762,6 +808,10 @@ def classify(author: str, title: str, summary: str, source_type: str) -> Tuple[s
         result = _call_llm_classify(text)
         if result:
             cat, pri = result
+            # 通报中心/CNCERT 规则稿不得被 LLM 误分为其他类
+            rule_cat = classify_by_rules(author, title, source_type)
+            if rule_cat:
+                return rule_cat, None
             if cat == "重大安全事件" and not pri:
                 pri = major_incident_priority(title, summary)
             return cat, pri

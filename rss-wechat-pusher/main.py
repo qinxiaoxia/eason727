@@ -35,6 +35,7 @@ try:
         major_incident_priority,
         REALTIME_CATEGORIES,
         TIMED_PUSH_CATEGORIES,
+        is_regulatory_ioc_alert,
     )
 except ImportError:
     import json
@@ -53,6 +54,7 @@ except ImportError:
             major_incident_priority,
             REALTIME_CATEGORIES,
             TIMED_PUSH_CATEGORIES,
+            is_regulatory_ioc_alert,
         )
     else:
         print("请复制 config.example.py 为 config.py 并填写配置")
@@ -577,9 +579,8 @@ _MAJOR_INCIDENT_PRIORITY_LABEL = {
     "low": "🟢 低优先级",
 }
 
-# 国家网络安全通报中心 + 重点防范 → 需抓取正文提取 IOC
+# 国家网络安全通报中心监管预警 → 宜抓取正文提取 IOC（见 classifier.is_regulatory_ioc_alert）
 IOC_ALERT_AUTHOR = "国家网络安全通报中心"
-IOC_ALERT_TITLE_PREFIX = "重点防范"
 
 # 翻译缓存，避免重复调用
 _translate_cache = {}
@@ -622,10 +623,29 @@ def _extract_iocs(text):
     if not text:
         return []
     pairs = []
-    for m in re.finditer(r"(?:恶意地址|域名)[:：]\s*([^\s，。\n]+)\s*关联IP(?:地址)?[:：]\s*([\d.]+)", text):
+    for m in re.finditer(
+        r"(?:恶意地址|恶意网址|域名)[:：]\s*([^\s，。\n]+)\s*(?:关联IP(?:地址)?|恶意IP(?:地址)?)[:：]\s*([\d.]+)",
+        text,
+    ):
         domain, ip = m.group(1).strip(), m.group(2).strip()
         if domain and domain != "-" and ip and ip.count(".") == 3 and _is_meaningful_ip(ip):
             pairs.append((domain, ip))
+    if not pairs:
+        for m in re.finditer(r"(?:恶意网址|恶意地址)[:：]\s*([^\s，。\n]+)", text):
+            domain = m.group(1).strip()
+            if domain and domain != "-":
+                pairs.append((domain, ""))
+        ips_only = [
+            ip
+            for ip in dict.fromkeys(re.findall(r"(?:恶意IP|关联IP)(?:地址)?[:：]\s*([\d.]+)", text))
+            if ip.count(".") == 3 and _is_meaningful_ip(ip)
+        ]
+        if pairs and ips_only:
+            for i, (d, _) in enumerate(pairs):
+                ip = ips_only[i] if i < len(ips_only) else ips_only[-1]
+                pairs[i] = (d, ip)
+        elif not pairs and ips_only:
+            pairs = [("", ip) for ip in ips_only[:20]]
     if not pairs:
         domains = list(dict.fromkeys(re.findall(r"(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}", text)))
         ips = list(dict.fromkeys(re.findall(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", text)))
@@ -667,7 +687,12 @@ def _build_ioc_push_content(item):
     cn_nums = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"]
     for i, (domain, ip) in enumerate(pairs):
         num = f"（{cn_nums[i]}）" if i < len(cn_nums) else f"（{i+1}）"
-        lines.append(f"{num}恶意地址：{domain} 关联IP：{ip}")
+        if domain and ip:
+            lines.append(f"{num}恶意地址：{domain} 关联IP：{ip}")
+        elif domain:
+            lines.append(f"{num}恶意地址：{domain}")
+        elif ip:
+            lines.append(f"{num}关联IP：{ip}")
     return "\n".join(lines)
 
 
@@ -856,10 +881,8 @@ def _build_single_category_content(category, items):
 
 
 def _is_ioc_alert_item(item):
-    """是否为国家网络安全通报中心 + 重点防范（需抓取正文提取 IOC）"""
-    author = (item.get("author") or "").strip()
-    title = (item.get("title") or "").strip()
-    return IOC_ALERT_AUTHOR in author and title.startswith(IOC_ALERT_TITLE_PREFIX)
+    """是否为国家网络安全通报中心监管预警稿（抓取正文尝试 IOC 特殊格式）。"""
+    return is_regulatory_ioc_alert(item.get("author") or "", item.get("title") or "")
 
 
 def send_wechat_per_category(webhook, items_by_category):
