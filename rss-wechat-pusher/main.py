@@ -2,7 +2,7 @@
 """
 RSS 推送到企业微信机器人
 - 静默：北京每天 20:00–次日 6:00 不推送（实时与定时均不推，拉取入库照常）
-- 实时两类（监管预警、重大事件）：北京 6、8、12、14、18 整点轮巡 + 9:30/15:30 定时同推；夜间发布的在次日 6:00 后非静默时段补推
+- 实时两类（监管预警、重大事件）：北京 6、12、18 整点轮巡 + 9:30/15:30 定时同推；夜间发布的在次日 6:00 后非静默时段补推
 - 定时六类（漏洞/网安新闻/赛事/其他 + AI行业资讯 + AI与信息安全技术）：9:30 档用「昨 15:30～今 9:30」时间窗（覆盖静默造成的缺口）；15:30 档与手动 --push-now 仅「今天」稿（北京日期）
 - 去重：已写入 pushed 的链接不再推送
 - 全量：`--push-all-now`；临时含昨天：`--push-now --with-yesterday`
@@ -48,7 +48,7 @@ except ImportError:
         FEEDS = [(u, t) for u, t in json.loads(feeds_json)]
         SCHEDULED_PUSH_TIMES = [(9, 30), (15, 30)]
         SCHEDULED_WINDOW_MINUTES = 5
-        POLL_HOURS_BEIJING = (6, 8, 12, 14, 18)
+        POLL_HOURS_BEIJING = (6, 12, 18)
         POLL_WINDOW_MINUTES = 5
         from classifier import (
             classify,
@@ -1224,7 +1224,7 @@ def main():
         if quiet_now:
             print(f"提示: 有 {len(new_realtime)} 条实时类文章已入库，当前为静默时段，将在次日 6:00 后轮巡补推。")
         else:
-            print(f"提示: 有 {len(new_realtime)} 条实时类文章已入库，当前非轮巡/定时时段，将在 6/8/12/14/18 整点轮巡或 9:30/15:30 定时中推送")
+            print(f"提示: 有 {len(new_realtime)} 条实时类文章已入库，当前非轮巡/定时时段，将在 6/12/18 整点轮巡或 9:30/15:30 定时中推送")
 
     # 3. 定时档：原四类 + AI 两类（9:30 时间窗 / 15:30 当天）或强制汇总；静默时段不推
     slot = _get_scheduled_slot()
@@ -1278,7 +1278,7 @@ def main():
             hint = "（含昨天）" if include_yesterday else ""
             print(f"定时推送: 0 条{hint}（无待推送文章，可能已推送过）")
     elif mode is None and not new_realtime and not quiet_now:
-        print("提示: 当前不在轮巡时段(北京 6/8/12/14/18 整点) 或 定时档(9:30/15:30)；实时两类在轮巡/定时；定时档六类在 9:30/15:30。使用 python main.py --push-now 仅推定时档，或 python main.py --push-all-now 全量推送。")
+        print("提示: 当前不在轮巡时段(北京 6/12/18 整点) 或 定时档(9:30/15:30)；实时两类在轮巡/定时；定时档六类在 9:30/15:30。使用 python main.py --push-now 仅推定时档，或 python main.py --push-all-now 全量推送。")
 
     conn.close()
     print("完成")

@@ -86,7 +86,7 @@ def _timed():
 @app.route("/")
 def index():
     return (
-        "Zeabur RSS 触发器：北京时间 轮巡 6/8/12/14/18 整点 + 定时 9:30/15:30 → "
+        "Zeabur RSS 触发器：北京时间 轮巡 6/12/18 整点 + 定时 9:30/15:30 → "
         f"GitHub workflow_dispatch（{WORKFLOW_POLL} / {WORKFLOW_TIMED}）"
     )
 
@@ -171,7 +171,7 @@ def start_scheduler() -> BackgroundScheduler | None:
 
     scheduler.add_job(
         _poll,
-        CronTrigger(hour="6,8,12,14,18", minute="0", timezone=TZ),
+        CronTrigger(hour="6,12,18", minute="0", timezone=TZ),
         id="poll_beijing",
         name="poll",
         misfire_grace_time=MISFIRE_GRACE_SEC,
@@ -191,7 +191,7 @@ def start_scheduler() -> BackgroundScheduler | None:
     atexit.register(_release_lock)
 
     msg = (
-        f"[Zeabur trigger] 时区={TZ} | 轮巡 {WORKFLOW_POLL} @ 北京 6,8,12,14,18:00 | "
+        f"[Zeabur trigger] 时区={TZ} | 轮巡 {WORKFLOW_POLL} @ 北京 6,12,18:00 | "
         f"定时 {WORKFLOW_TIMED} @ 北京 9:30,15:30"
     )
     print(msg, flush=True)
