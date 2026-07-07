@@ -147,7 +147,8 @@ def call_llm_with_fallback(
                 "max_tokens": max_tokens,
                 "temperature": 0,
             }
-            r = requests.post(url, json=payload, headers=headers, timeout=15)
+            timeout = 45 if purpose == "ioc" else 15
+            r = requests.post(url, json=payload, headers=headers, timeout=timeout)
             r.raise_for_status()
             data = r.json()
             content = (data.get("choices", [{}])[0].get("message", {}).get("content") or "").strip()

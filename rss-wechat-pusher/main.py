@@ -1117,9 +1117,8 @@ def main():
     known_meta = get_known_article_meta(conn)
     pushed = get_pushed_links(conn)
 
-    # 1. 并行拉取所有源；仅对新文章调用 LLM 分类
-    all_new = []
-    skipped_known = 0
+    # 1. 并行拉取所有源
+    raw_entries = []
 
     def fetch_one(feed_url, source_type):
         entries = fetch_feed(feed_url)
@@ -1129,36 +1128,50 @@ def main():
         futures = {ex.submit(fetch_one, url, st): (url, st) for url, st in FEEDS}
         for future in as_completed(futures):
             try:
-                items = future.result()
-                for feed_url, source_type, entry in items:
-                    link = _normalize_entry_link(entry.get("link") or "", feed_url)
-                    if not link:
-                        continue
-                    if link in known_meta:
-                        skipped_known += 1
-                        continue
-                    title = (entry.get("title") or "").strip()
-                    summary = (entry.get("summary") or "")
-                    author = get_author(entry)
-                    published_str = format_published(entry)
-                    category, incident_priority = classify(author, title, summary, source_type)
-                    all_new.append(
-                        (
-                            link,
-                            title,
-                            summary,
-                            category,
-                            incident_priority,
-                            author,
-                            feed_url,
-                            published_str,
-                            source_type,
-                        )
-                    )
+                raw_entries.extend(future.result())
             except Exception as e:
                 url, st = futures[future]
                 print(f"拉取失败 {url}: {e}")
 
+    # 2. 已入库跳过；仅新文章走 LLM 分类（可并发）
+    skipped_known = 0
+    to_classify = []
+    for feed_url, source_type, entry in raw_entries:
+        link = _normalize_entry_link(entry.get("link") or "", feed_url)
+        if not link:
+            continue
+        if link in known_meta:
+            skipped_known += 1
+            continue
+        to_classify.append((feed_url, source_type, entry))
+
+    def _classify_entry(item):
+        feed_url, source_type, entry = item
+        link = _normalize_entry_link(entry.get("link") or "", feed_url)
+        title = (entry.get("title") or "").strip()
+        summary = entry.get("summary") or ""
+        author = get_author(entry)
+        published_str = format_published(entry)
+        category, incident_priority = classify(author, title, summary, source_type)
+        return (
+            link,
+            title,
+            summary,
+            category,
+            incident_priority,
+            author,
+            feed_url,
+            published_str,
+            source_type,
+        )
+
+    all_new = []
+    if to_classify:
+        workers = max(1, min(int(os.getenv("LLM_CLASSIFY_WORKERS", "4")), 8))
+        print(f"新文章 {len(to_classify)} 条待分类（并发 {workers}）", flush=True)
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            for row in ex.map(_classify_entry, to_classify):
+                all_new.append(row)
     if skipped_known:
         print(f"跳过已入库 {skipped_known} 条（不重复分类）", flush=True)
 
