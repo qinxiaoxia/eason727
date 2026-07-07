@@ -38,22 +38,27 @@ POLL_HOURS_BEIJING = (6, 12, 18)
 # 整点后若干分钟内视为本轮轮巡（容错 GitHub Actions 延迟）
 POLL_WINDOW_MINUTES = 5
 
-# 大模型分类 / 翻译：规则未命中时调用 LLM；LLM_API_KEY 留空则全部归为「其他资讯」
-# 支持 OpenAI 兼容 API：DashScope、DeepSeek、智谱等
+# 大模型分类 / 翻译（快模型）；IOC 提取见 LLM_IOC_MODELS
 LLM_API_KEY = os.getenv("LLM_API_KEY") or ""
 LLM_BASE_URL = os.getenv("LLM_BASE_URL") or "https://dashscope.aliyuncs.com/compatible-mode/v1"
-# 单模型（当下方 LLM_MODELS 为空且未设置 LLM_MODELS_JSON 时使用）
-LLM_MODEL = os.getenv("LLM_MODEL") or "qwen3.7-plus"
-
-# 多模型回退：同一 KEY + BASE_URL 下按顺序尝试，前一个失败/无内容则换下一个
-# GitHub Actions：Secret「LLM_MODELS_JSON」填一行 JSON 数组，例如：["qwen3.7-plus"]
+LLM_MODEL = os.getenv("LLM_MODEL") or "qwen-turbo"
+# GitHub Secret「LLM_MODELS_JSON」示例：["qwen-turbo"]
 _llm_models_json = os.getenv("LLM_MODELS_JSON")
 try:
     LLM_MODELS = json.loads(_llm_models_json) if _llm_models_json else []
 except json.JSONDecodeError:
     LLM_MODELS = []
 if not LLM_MODELS:
-    LLM_MODELS = ["qwen3.7-plus"]
+    LLM_MODELS = ["qwen-turbo"]
+
+# 监管机构 IOC 提取（慢/强模型）；GitHub Secret「LLM_IOC_MODELS_JSON」示例：["qwen3.7-plus"]
+_llm_ioc_models_json = os.getenv("LLM_IOC_MODELS_JSON")
+try:
+    LLM_IOC_MODELS = json.loads(_llm_ioc_models_json) if _llm_ioc_models_json else []
+except json.JSONDecodeError:
+    LLM_IOC_MODELS = []
+if not LLM_IOC_MODELS:
+    LLM_IOC_MODELS = ["qwen3.7-plus"]
 
 # 纯英文标题自动翻译为中文（需配置 LLM）
 # 勿使用「数学专用」等不适配 NLP 的模型名做翻译，易拒答或重复输出

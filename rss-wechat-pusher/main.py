@@ -124,6 +124,12 @@ def get_known_links(conn):
     return {row[0] for row in cur.fetchall()}
 
 
+def get_known_article_meta(conn):
+    """已入库文章的分类与优先级，用于跳过重复 LLM 分类。"""
+    cur = conn.execute("SELECT link, category, incident_priority FROM articles")
+    return {row[0]: (row[1] or "", row[2]) for row in cur.fetchall()}
+
+
 def get_pushed_links(conn):
     """已推送的链接"""
     cur = conn.execute("SELECT link FROM pushed")
@@ -724,7 +730,7 @@ def _extract_iocs_by_llm(text, title=""):
     """监管机构 IOC 通报：优先用大模型从正文结构化提取。"""
     from llm_utils import call_llm_with_fallback, get_llm_providers
 
-    if not text or not get_llm_providers():
+    if not text or not get_llm_providers("ioc"):
         return []
     body = text[:12000]
     user = f"标题：{title}\n\n正文：\n{body}" if title else f"正文：\n{body}"
@@ -732,10 +738,11 @@ def _extract_iocs_by_llm(text, title=""):
         [{"role": "user", "content": user}],
         max_tokens=1024,
         system=_IOC_LLM_SYSTEM,
+        purpose="ioc",
     )
     pairs = _parse_llm_ioc_response(content or "")
     if pairs:
-        print(f"[LLM] IOC 提取成功: {len(pairs)} 条", flush=True)
+        print(f"[IOC] LLM 提取成功: {len(pairs)} 条", flush=True)
     return pairs
 
 
@@ -1103,9 +1110,16 @@ def is_scheduled_time():
 
 
 def main():
-    # 1. 并行拉取所有源（8 个同时请求，大幅提速）
-    # all_new: (link, title, summary, category, incident_priority, author, feed_url, published_str, source_type)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
+    conn.execute("PRAGMA busy_timeout = 30000")
+    conn.execute("PRAGMA journal_mode = WAL")
+    init_db(conn)
+    known_meta = get_known_article_meta(conn)
+    pushed = get_pushed_links(conn)
+
+    # 1. 并行拉取所有源；仅对新文章调用 LLM 分类
     all_new = []
+    skipped_known = 0
 
     def fetch_one(feed_url, source_type):
         entries = fetch_feed(feed_url)
@@ -1119,6 +1133,9 @@ def main():
                 for feed_url, source_type, entry in items:
                     link = _normalize_entry_link(entry.get("link") or "", feed_url)
                     if not link:
+                        continue
+                    if link in known_meta:
+                        skipped_known += 1
                         continue
                     title = (entry.get("title") or "").strip()
                     summary = (entry.get("summary") or "")
@@ -1142,13 +1159,10 @@ def main():
                 url, st = futures[future]
                 print(f"拉取失败 {url}: {e}")
 
-    # 2. 短时连接数据库，批量读写
-    conn = sqlite3.connect(DB_PATH, timeout=30)
-    conn.execute("PRAGMA busy_timeout = 30000")
-    conn.execute("PRAGMA journal_mode = WAL")  # WAL 模式减少锁定
-    init_db(conn)
-    known = get_known_links(conn)
-    pushed = get_pushed_links(conn)
+    if skipped_known:
+        print(f"跳过已入库 {skipped_known} 条（不重复分类）", flush=True)
+
+    known = set(known_meta.keys())
 
     new_realtime = []
     now_str = datetime.now().isoformat()
