@@ -37,6 +37,7 @@ try:
         REALTIME_CATEGORIES,
         TIMED_PUSH_CATEGORIES,
         is_regulatory_ioc_alert,
+        exclusion_reason,
     )
 except ImportError:
     import json
@@ -56,6 +57,7 @@ except ImportError:
             REALTIME_CATEGORIES,
             TIMED_PUSH_CATEGORIES,
             is_regulatory_ioc_alert,
+            exclusion_reason,
         )
     else:
         print("请复制 config.example.py 为 config.py 并填写配置")
@@ -104,6 +106,15 @@ def init_db(conn):
             k TEXT PRIMARY KEY,
             v TEXT
         );
+        CREATE TABLE IF NOT EXISTS excluded (
+            link TEXT PRIMARY KEY,
+            title TEXT,
+            reason TEXT,
+            author TEXT,
+            source_url TEXT,
+            published_str TEXT,
+            excluded_at TEXT
+        );
     """)
     conn.commit()
     _migrate_articles_schema(conn)
@@ -128,6 +139,12 @@ def get_known_article_meta(conn):
     """已入库文章的分类与优先级，用于跳过重复 LLM 分类。"""
     cur = conn.execute("SELECT link, category, incident_priority FROM articles")
     return {row[0]: (row[1] or "", row[2]) for row in cur.fetchall()}
+
+
+def get_excluded_links(conn):
+    """已规则剔除、不再处理的链接。"""
+    cur = conn.execute("SELECT link FROM excluded")
+    return {row[0] for row in cur.fetchall()}
 
 
 def get_pushed_links(conn):
@@ -1115,7 +1132,9 @@ def main():
     conn.execute("PRAGMA journal_mode = WAL")
     init_db(conn)
     known_meta = get_known_article_meta(conn)
+    excluded_links = get_excluded_links(conn)
     pushed = get_pushed_links(conn)
+    processed_links = set(known_meta.keys()) | excluded_links
 
     # 1. 并行拉取所有源
     raw_entries = []
@@ -1133,15 +1152,34 @@ def main():
                 url, st = futures[future]
                 print(f"拉取失败 {url}: {e}")
 
-    # 2. 已入库跳过；仅新文章走 LLM 分类（可并发）
+    # 2. 已入库/已剔除跳过；噪声规则过滤；仅新文章走 LLM 分类
     skipped_known = 0
+    skipped_excluded = 0
+    skipped_noise = 0
+    noise_batch = []
     to_classify = []
+    now_str = datetime.now().isoformat()
     for feed_url, source_type, entry in raw_entries:
         link = _normalize_entry_link(entry.get("link") or "", feed_url)
         if not link:
             continue
-        if link in known_meta:
-            skipped_known += 1
+        if link in processed_links:
+            if link in known_meta:
+                skipped_known += 1
+            else:
+                skipped_excluded += 1
+            continue
+        title = (entry.get("title") or "").strip()
+        summary = entry.get("summary") or ""
+        author = get_author(entry)
+        published_str = format_published(entry)
+        noise_label = exclusion_reason(author, title, summary, source_type)
+        if noise_label:
+            noise_batch.append(
+                (link, title, noise_label, author, feed_url, published_str, now_str)
+            )
+            processed_links.add(link)
+            skipped_noise += 1
             continue
         to_classify.append((feed_url, source_type, entry))
 
@@ -1174,11 +1212,22 @@ def main():
                 all_new.append(row)
     if skipped_known:
         print(f"跳过已入库 {skipped_known} 条（不重复分类）", flush=True)
+    if skipped_excluded:
+        print(f"跳过已剔除 {skipped_excluded} 条", flush=True)
+    if noise_batch:
+        conn.executemany(
+            """INSERT OR IGNORE INTO excluded
+               (link, title, reason, author, source_url, published_str, excluded_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            noise_batch,
+        )
+        conn.commit()
+        print(f"规则剔除噪声 {skipped_noise} 条（不入库、不分类）", flush=True)
 
     known = set(known_meta.keys())
 
     new_realtime = []
-    now_str = datetime.now().isoformat()
+    insert_now = datetime.now().isoformat()
     for link, title, summary, category, incident_priority, author, feed_url, published_str, source_type in all_new:
         if link in known:
             continue
@@ -1186,7 +1235,7 @@ def main():
             """INSERT OR IGNORE INTO articles
                (link, title, summary, category, incident_priority, author, source_url, published_str, first_seen_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (link, title, summary, category, incident_priority, author, feed_url, published_str, now_str),
+            (link, title, summary, category, incident_priority, author, feed_url, published_str, insert_now),
         )
         known.add(link)
         # 监管预警、重大事件→实时推送（公众号+网站均支持，以分类为准）

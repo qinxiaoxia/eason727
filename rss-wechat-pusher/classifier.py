@@ -96,6 +96,63 @@ ALERT_RULES = [
     (_CNCERT_ALERT_AUTHOR, cncert_regulatory_title),
 ]
 
+# ---------- 噪声过滤：公众号等混入的非威胁情报稿（入库前规则剔除，不走 LLM）----------
+# 归纳：招标采购 | 赛事结果/表彰 | 招聘营销 | 时政节日 | 明显离题
+# exclusion_reason() 返回剔除原因字符串；None 表示保留。
+
+_EXCLUDE_PROCUREMENT = re.compile(
+    r"(招标|采购公告|公开采购|公开招标|竞争性磋商|询价公告|中标(?:结果)?公告|成交公告|"
+    r"训练咨询(?:服务)?.*招标|攻防对抗.*(?:招标|采购))"
+)
+
+_EXCLUDE_COMPETITION_RESULT = re.compile(
+    r"(决赛结果|结果公布|获奖名单|光荣榜|"
+    r"荣获[^，。]{0,30}(?:一等奖|二等奖|三等奖|特等奖|奖项)|"
+    r"(?:一等奖|二等奖|三等奖|特等奖)[^，。]{0,12}(?:荣获|获得)|"
+    r"(?:技能竞赛|网信杯|选拔赛|挑战赛).{0,40}(?:一等奖|二等奖|三等奖|获奖)|"
+    r"CTF(?:竞赛)?项目.*(?:采购|招标|公开采购))"
+)
+
+_EXCLUDE_JOB_MARKETING = re.compile(
+    r"((?:网络安全|信息安全|渗透|安服).{0,8}岗位.*(?:开放|招聘)|"
+    r"(?:诚聘|急聘|招聘启事|诚招|上岗计划|百城上岗))"
+)
+
+_EXCLUDE_GENERAL_NEWS = re.compile(
+    r"(今日(?:小寒|大寒|立春|雨水|惊蛰|春分|清明|谷雨|立夏|小满|芒种|夏至|小暑|大暑|"
+    r"立秋|处暑|白露|秋分|寒露|霜降|立冬|小雪|大雪|冬至)|"
+    r"互致贺电|致电祝贺|祝贺.*当选|建交.*周年)"
+)
+
+_EXCLUDE_OFF_TOPIC = re.compile(
+    r"(中国烟草|边境毒品|传奇人生|隐蔽战线英雄|毒品治理)"
+)
+
+_EXCLUSION_RULES = (
+    ("招标采购", _EXCLUDE_PROCUREMENT),
+    ("赛事结果/表彰", _EXCLUDE_COMPETITION_RESULT),
+    ("招聘营销", _EXCLUDE_JOB_MARKETING),
+    ("时政/节日", _EXCLUDE_GENERAL_NEWS),
+    ("离题内容", _EXCLUDE_OFF_TOPIC),
+)
+
+
+def exclusion_reason(author: str, title: str, summary: str = "", source_type: str = "") -> Optional[str]:
+    """
+    判断是否属应剔除的噪声稿。优先保留监管机构通报等预警标题。
+    公众号源（wewe_rss）与网站 RSS 均适用。
+    """
+    title = (title or "").strip()
+    if not title:
+        return None
+    if classify_by_rules(author, title, source_type or "wewe_rss"):
+        return None
+    blob = f"{title}\n{summary or ''}"[:2000]
+    for label, pattern in _EXCLUSION_RULES:
+        if pattern.search(blob):
+            return label
+    return None
+
 # LLM 输出英文标签 → 中文类名（用于解析；不含 other，避免匹配 another 等）
 _EN_LABEL_TO_CN = (
     ("security incident", "重大安全事件"),
