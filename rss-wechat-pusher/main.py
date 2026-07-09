@@ -147,6 +147,38 @@ def get_excluded_links(conn):
     return {row[0] for row in cur.fetchall()}
 
 
+def _exclude_noise_items(conn, items):
+    """推送前再次剔除噪声（覆盖已入库的历史稿），并写入 excluded。"""
+    if not items:
+        return []
+    kept = []
+    batch = []
+    now = datetime.now().isoformat()
+    for item in items:
+        title = item.get("title") or ""
+        author = item.get("author") or ""
+        summary = item.get("summary") or ""
+        link = item.get("link") or ""
+        if not link:
+            continue
+        st = item.get("source_type") or _source_type_for_feed_url(item.get("source_url") or "")
+        reason = exclusion_reason(author, title, summary, st)
+        if reason:
+            batch.append((link, title, reason, author, item.get("source_url") or "", item.get("published_str") or "", now))
+        else:
+            kept.append(item)
+    if batch:
+        conn.executemany(
+            """INSERT OR IGNORE INTO excluded
+               (link, title, reason, author, source_url, published_str, excluded_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            batch,
+        )
+        conn.commit()
+        print(f"推送前剔除噪声 {len(batch)} 条", flush=True)
+    return kept
+
+
 def get_pushed_links(conn):
     """已推送的链接"""
     cur = conn.execute("SELECT link FROM pushed")
@@ -330,7 +362,9 @@ def _collect_realtime_to_push(conn, new_realtime, include_db_backlog):
     ph = ",".join("?" * len(REALTIME_CATEGORIES))
     cur = conn.execute(
         f"""SELECT link, title, summary, published_str, category, author, source_url, incident_priority
-           FROM articles WHERE category IN ({ph}) AND link NOT IN (SELECT link FROM pushed)""",
+           FROM articles WHERE category IN ({ph})
+             AND link NOT IN (SELECT link FROM pushed)
+             AND link NOT IN (SELECT link FROM excluded)""",
         tuple(REALTIME_CATEGORIES),
     )
     for link, title, summary, ps, cat, author, su, ip in cur.fetchall():
@@ -1284,6 +1318,8 @@ def main():
             if _realtime_article_eligible_now(_parse_published_to_beijing(x.get("published_str")), now_bj)
         ]
         if realtime_items:
+            realtime_items = _exclude_noise_items(conn, realtime_items)
+        if realtime_items:
             by_cat = {}
             for item in realtime_items:
                 by_cat.setdefault(item["category"], []).append(item)
@@ -1311,7 +1347,8 @@ def main():
         ph = ",".join("?" * len(TIMED_PUSH_CATEGORIES))
         cur = conn.execute(
             f"""SELECT link, title, published_str, category, author, source_url FROM articles
-               WHERE category IN ({ph}) AND link NOT IN (SELECT link FROM pushed)""",
+               WHERE category IN ({ph}) AND link NOT IN (SELECT link FROM pushed)
+                 AND link NOT IN (SELECT link FROM excluded)""",
             tuple(TIMED_PUSH_CATEGORIES),
         )
         rows = cur.fetchall()
@@ -1329,27 +1366,33 @@ def main():
         elif force_timed_digest:
             rows = [(l, t, ps, c, a, su) for l, t, ps, c, a, su in rows if _is_today_beijing(_parse_published_to_beijing(ps))]
         if rows:
-            by_cat = {}
+            row_items = []
             for link, title, published_str, category, author, source_url in rows:
                 su = source_url or ""
                 st = _source_type_for_feed_url(su)
-                by_cat.setdefault(category, []).append({
+                row_items.append({
                     "title": title,
                     "published_str": published_str,
                     "link": link,
+                    "category": category,
                     "author": author or "",
                     "source_url": su,
                     "source_type": st,
                 })
-            send_wechat_per_category(WECHAT_WEBHOOK, by_cat)
-            now = datetime.now().isoformat()
-            for link, *_ in rows:
-                conn.execute(
-                    "INSERT OR IGNORE INTO pushed (link, pushed_at, push_type) VALUES (?, ?, ?)",
-                    (link, now, "scheduled"),
-                )
-            conn.commit()
-            print(f"定时推送 {len(rows)} 条")
+            row_items = _exclude_noise_items(conn, row_items)
+            if row_items:
+                by_cat = {}
+                for item in row_items:
+                    by_cat.setdefault(item["category"], []).append(item)
+                send_wechat_per_category(WECHAT_WEBHOOK, by_cat)
+                now = datetime.now().isoformat()
+                for item in row_items:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO pushed (link, pushed_at, push_type) VALUES (?, ?, ?)",
+                        (item["link"], now, "scheduled"),
+                    )
+                conn.commit()
+                print(f"定时推送 {len(row_items)} 条")
         elif force_timed_digest:
             hint = "（含昨天）" if include_yesterday else ""
             print(f"定时推送: 0 条{hint}（无待推送文章，可能已推送过）")
