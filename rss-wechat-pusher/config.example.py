@@ -63,3 +63,7 @@ if not LLM_IOC_MODELS:
 # 纯英文标题自动翻译为中文（需配置 LLM）
 # 勿使用「数学专用」等不适配 NLP 的模型名做翻译，易拒答或重复输出
 TRANSLATE_ENABLED = True
+
+# 公众号噪声：规则未命中时用 turbo 复核是否属网安/AI 情报（见 classifier.exclusion_reason）
+# 环境变量 NOISE_LLM_REVIEW=0 关闭；=all 时对全部 RSS 源复核
+NOISE_LLM_REVIEW = os.getenv("NOISE_LLM_REVIEW", "").strip().lower() not in ("0", "false", "no", "off")

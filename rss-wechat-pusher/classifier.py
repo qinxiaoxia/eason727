@@ -11,6 +11,7 @@
 实时两类仅轮巡；定时档含原四类 + AI 两类。详见 _CLASSIFICATION_CRITERIA。
 classify() 返回 (类别, incident_priority)；incident_priority 仅「重大安全事件」为 high/medium/low，其余为 None。
 """
+import os
 import re
 from typing import Optional, Tuple
 
@@ -96,9 +97,8 @@ ALERT_RULES = [
     (_CNCERT_ALERT_AUTHOR, cncert_regulatory_title),
 ]
 
-# ---------- 噪声过滤：公众号等混入的非威胁情报稿（入库前规则剔除，不走 LLM）----------
-# 归纳：招标采购 | 赛事结果/表彰 | 招聘营销 | 时政节日 | 明显离题
-# exclusion_reason() 返回剔除原因字符串；None 表示保留。
+# ---------- 噪声过滤：规则优先 + 公众号可选 turbo 语义复核 ----------
+# exclusion_reason() 返回剔除原因；None 表示保留。监管机构预警规则命中时永不剔除。
 
 _EXCLUDE_PROCUREMENT = re.compile(
     r"(招标|采购公告|公开采购|公开招标|竞争性磋商|询价公告|中标(?:结果)?公告|成交公告|"
@@ -139,21 +139,98 @@ _EXCLUSION_RULES = (
     ("离题/宣传", _EXCLUDE_OFF_TOPIC),
 )
 
+_LLM_NOISE_REVIEW_SYSTEM = """你是网络安全与 AI 资讯频道的稿件筛选编辑。频道只推送与「网络安全 / 信息安全 / 人工智能（技术及产业）」相关、且对值班人员有信息价值的稿件。
 
-def exclusion_reason(author: str, title: str, summary: str = "", source_type: str = "") -> Optional[str]:
+【应保留】标题/摘要可归入以下任一类，或与之直接相关：
+1. 监管机构预警（通报中心/CNCERT 风险提示、恶意 IOC 等）
+2. 漏洞信息（CVE、补丁、安全公告、CVSS）
+3. 重大安全事件（已确认实害的攻击、泄露、勒索等）
+4. 网安新闻资讯（威胁动态、政策解读、行业新闻、攻防技术报道）
+5. 网安赛事资讯（CTF/HVV/护网/竞赛报名、赛题、技术 writeup、赛事活动报道——不是采购/颁奖喜报）
+6. AI行业资讯、AI与信息安全技术（大模型/AIGC/Agent 产业动态，或 AI 与安全交叉）
+7. 其他资讯：仍须在网安/AI/数据安全/隐私合规/威胁情报语境内；不能是无关杂闻
+
+【应剔除】与上述无关或仅有「安全」字样但实质不是情报，例如：
+政府采购/招标/采购意向；赛事获奖表彰、颁奖仪式、单位喜报；招聘/培训招生/上岗营销；时政贺电、节气问候；党建宣传、人物传记、社会民生、公安救援宣传等非技术稿。
+
+仅输出一行：保留 —— 或 —— 剔除|原因（5字内中文，如招标采购、颁奖表彰、离题宣传）"""
+
+
+def _noise_llm_review_enabled(source_type: str) -> bool:
+    flag = os.getenv("NOISE_LLM_REVIEW", "").strip().lower()
+    if flag in ("0", "false", "no", "off"):
+        return False
+    if flag in ("1", "true", "yes", "on", "all"):
+        return True
+    try:
+        from config import NOISE_LLM_REVIEW
+        if NOISE_LLM_REVIEW is False:
+            return False
+        if NOISE_LLM_REVIEW is True:
+            return True
+    except ImportError:
+        pass
+    # 默认：仅公众号源做语义复核（噪声主要从此处混入）
+    return (source_type or "").strip().lower() == "wewe_rss"
+
+
+def _parse_llm_noise_response(content: str) -> Optional[str]:
+    if not content:
+        return None
+    line = content.strip().split("\n")[0].strip()
+    if line.startswith("保留"):
+        return None
+    if line.startswith("剔除"):
+        if "|" in line:
+            return line.split("|", 1)[1].strip()[:32] or "LLM噪声"
+        return "LLM噪声"
+    if "剔除" in line[:12]:
+        return "LLM噪声"
+    return None
+
+
+def _llm_exclusion_reason(author: str, title: str, summary: str) -> Optional[str]:
+    from llm_utils import call_llm_with_fallback, get_llm_providers
+
+    if not get_llm_providers():
+        return None
+    text = f"作者：{author or '未知'}\n标题：{title}\n摘要：{(summary or '')[:400]}"
+    raw = call_llm_with_fallback(
+        [{"role": "user", "content": text}],
+        max_tokens=32,
+        system=_LLM_NOISE_REVIEW_SYSTEM,
+        purpose="default",
+    )
+    reason = _parse_llm_noise_response(raw or "")
+    if reason:
+        print(f"[LLM] 噪声复核剔除: {reason} | {title[:40]}", flush=True)
+    return reason
+
+
+def exclusion_reason(
+    author: str,
+    title: str,
+    summary: str = "",
+    source_type: str = "",
+    llm_review: Optional[bool] = None,
+) -> Optional[str]:
     """
-    判断是否属应剔除的噪声稿。优先保留监管机构通报等预警标题。
-    公众号源（wewe_rss）与网站 RSS 均适用。
+    判断是否应剔除。顺序：监管预警保留 → 规则 →（可选）turbo 语义复核。
+    llm_review=None 时按配置/来源类型决定；公众号默认开启语义复核。
     """
     title = (title or "").strip()
     if not title:
         return None
-    if classify_by_rules(author, title, source_type or "wewe_rss"):
+    st = (source_type or "wewe_rss").strip().lower()
+    if classify_by_rules(author, title, st):
         return None
     blob = f"{title}\n{summary or ''}"[:2000]
     for label, pattern in _EXCLUSION_RULES:
         if pattern.search(blob):
             return label
+    do_llm = _noise_llm_review_enabled(st) if llm_review is None else llm_review
+    if do_llm:
+        return _llm_exclusion_reason(author, title, summary)
     return None
 
 # LLM 输出英文标签 → 中文类名（用于解析；不含 other，避免匹配 another 等）
