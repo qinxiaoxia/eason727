@@ -1,9 +1,9 @@
-# 仅「定时四类」：北京 9:30 / 15:30（与 rss-push.yml 轮巡拆分，降低 schedule 漏跑概率）
+# 仅「定时档」：北京 9:30 / 12:00 / 15:30 / 17:30（与 rss-push.yml 轮巡拆分）
 # Secrets 与 rss-push.yml 相同
 name: RSS Push Timed
 
 on:
-  # 9:30/15:30 由 Zeabur 按北京时间触发 workflow_dispatch，不用 GitHub schedule
+  # 上述时刻由 Zeabur 按北京时间触发 workflow_dispatch，不用 GitHub schedule
   workflow_dispatch:
 
 jobs:

@@ -9,7 +9,7 @@ Zeabur 定时触发器：按【北京时间】cron 调用 GitHub API 触发 work
   GITHUB_TOKEN（必填）
   GITHUB_REPO（默认 qinxiaoxia/eason727）
   WORKFLOW_POLL（默认 rss-push.yml）— 轮巡
-  WORKFLOW_TIMED（默认 rss-push-timed.yml）— 9:30/15:30 定时
+  WORKFLOW_TIMED（默认 rss-push-timed.yml）— 9:30/12:00/15:30/17:30 定时
 
 PAT 需含 repo + workflow（或 classic repo 全权限）。
 
@@ -86,7 +86,7 @@ def _timed():
 @app.route("/")
 def index():
     return (
-        "Zeabur RSS 触发器：北京时间 轮巡 6/12/18 整点 + 定时 9:30/15:30 → "
+        "Zeabur RSS 触发器：北京时间 轮巡 6/12/18 整点 + 定时 9:30/12:00/15:30/17:30 → "
         f"GitHub workflow_dispatch（{WORKFLOW_POLL} / {WORKFLOW_TIMED}）"
     )
 
@@ -180,8 +180,24 @@ def start_scheduler() -> BackgroundScheduler | None:
     scheduler.add_job(
         _timed,
         CronTrigger(hour="9,15", minute="30", timezone=TZ),
-        id="timed_beijing",
-        name="timed",
+        id="timed_beijing_930_1530",
+        name="timed_930_1530",
+        misfire_grace_time=MISFIRE_GRACE_SEC,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        _timed,
+        CronTrigger(hour="12", minute="0", timezone=TZ),
+        id="timed_beijing_1200",
+        name="timed_1200",
+        misfire_grace_time=MISFIRE_GRACE_SEC,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        _timed,
+        CronTrigger(hour="17", minute="30", timezone=TZ),
+        id="timed_beijing_1730",
+        name="timed_1730",
         misfire_grace_time=MISFIRE_GRACE_SEC,
         coalesce=True,
     )
@@ -192,7 +208,7 @@ def start_scheduler() -> BackgroundScheduler | None:
 
     msg = (
         f"[Zeabur trigger] 时区={TZ} | 轮巡 {WORKFLOW_POLL} @ 北京 6,12,18:00 | "
-        f"定时 {WORKFLOW_TIMED} @ 北京 9:30,15:30"
+        f"定时 {WORKFLOW_TIMED} @ 北京 9:30,12:00,15:30,17:30"
     )
     print(msg, flush=True)
     sys.stderr.write(msg + "\n")

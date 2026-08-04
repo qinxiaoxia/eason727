@@ -18,7 +18,7 @@ from typing import Optional, Tuple
 # 实时推送类别（仅在轮巡 run 中推送，见 main.py _get_run_mode）
 REALTIME_CATEGORIES = {"监管机构预警", "重大安全事件"}
 
-# 定时推送类别（仅 9:30 / 15:30 北京汇总推送，不含实时两类）
+# 定时推送类别（9:30 / 12:00 / 15:30 / 17:30 北京汇总推送，不含实时两类）
 ALL_CATEGORIES = [
     "监管机构预警",
     "重大安全事件",

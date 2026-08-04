@@ -2,8 +2,8 @@
 """
 RSS 推送到企业微信机器人
 - 静默：北京每天 20:00–次日 6:00 不推送（实时与定时均不推，拉取入库照常）
-- 实时两类（监管预警、重大事件）：北京 6、12、18 整点轮巡 + 9:30/15:30 定时同推；夜间发布的在次日 6:00 后非静默时段补推
-- 定时六类（漏洞/网安新闻/赛事/其他 + AI行业资讯 + AI与信息安全技术）：9:30 档用「昨 15:30～今 9:30」时间窗（覆盖静默造成的缺口）；15:30 档与手动 --push-now 仅「今天」稿（北京日期）
+- 实时两类（监管预警、重大事件）：北京 6、12、18 整点轮巡 + 9:30/12:00/15:30/17:30 定时同推；夜间发布的在次日 6:00 后非静默时段补推
+- 定时六类（漏洞/网安新闻/赛事/其他 + AI行业资讯 + AI与信息安全技术）：9:30 档用「昨 15:30～今 9:30」时间窗；12:00/15:30/17:30 与手动 --push-now 仅「今天」稿（北京日期）
 - 去重：已写入 pushed 的链接不再推送
 - 全量：`--push-all-now`；临时含昨天：`--push-now --with-yesterday`
 """
@@ -47,7 +47,7 @@ except ImportError:
     if webhook and feeds_json:
         WECHAT_WEBHOOK = webhook
         FEEDS = [(u, t) for u, t in json.loads(feeds_json)]
-        SCHEDULED_PUSH_TIMES = [(9, 30), (15, 30)]
+        SCHEDULED_PUSH_TIMES = [(9, 30), (12, 0), (15, 30), (17, 30)]
         SCHEDULED_WINDOW_MINUTES = 5
         POLL_HOURS_BEIJING = (6, 12, 18)
         POLL_WINDOW_MINUTES = 5
@@ -313,8 +313,9 @@ def _get_scheduled_slot():
     except ImportError:
         now = datetime.now()
     for h, m in SCHEDULED_PUSH_TIMES:
-        start = datetime(now.year, now.month, now.day, h, m - SCHEDULED_WINDOW_MINUTES, tzinfo=getattr(now, "tzinfo", None))
-        end = datetime(now.year, now.month, now.day, h, m + SCHEDULED_WINDOW_MINUTES, tzinfo=getattr(now, "tzinfo", None))
+        center = now.replace(hour=h, minute=m, second=0, microsecond=0)
+        start = center - timedelta(minutes=SCHEDULED_WINDOW_MINUTES)
+        end = center + timedelta(minutes=SCHEDULED_WINDOW_MINUTES)
         if start <= now <= end:
             return (h, m)
     return None
@@ -1146,18 +1147,7 @@ def send_wechat(webhook, content, use_markdown=True):
 
 def is_scheduled_time():
     """当前是否在定时推送时间窗口内（使用北京时区，兼容 GitHub Actions UTC 环境）"""
-    try:
-        from zoneinfo import ZoneInfo
-        tz = ZoneInfo("Asia/Shanghai")
-        now = datetime.now(tz)
-    except ImportError:
-        now = datetime.now()
-    for h, m in SCHEDULED_PUSH_TIMES:
-        start = datetime(now.year, now.month, now.day, h, m - SCHEDULED_WINDOW_MINUTES, tzinfo=getattr(now, "tzinfo", None))
-        end = datetime(now.year, now.month, now.day, h, m + SCHEDULED_WINDOW_MINUTES, tzinfo=getattr(now, "tzinfo", None))
-        if start <= now <= end:
-            return True
-    return False
+    return _get_scheduled_slot() is not None
 
 
 def main():
@@ -1336,9 +1326,9 @@ def main():
         if quiet_now:
             print(f"提示: 有 {len(new_realtime)} 条实时类文章已入库，当前为静默时段，将在次日 6:00 后轮巡补推。")
         else:
-            print(f"提示: 有 {len(new_realtime)} 条实时类文章已入库，当前非轮巡/定时时段，将在 6/12/18 整点轮巡或 9:30/15:30 定时中推送")
+            print(f"提示: 有 {len(new_realtime)} 条实时类文章已入库，当前非轮巡/定时时段，将在 6/12/18 整点轮巡或 9:30/12:00/15:30/17:30 定时中推送")
 
-    # 3. 定时档：原四类 + AI 两类（9:30 时间窗 / 15:30 当天）或强制汇总；静默时段不推
+    # 3. 定时档：原四类 + AI 两类（9:30 时间窗；12:00/15:30/17:30 当天）或强制汇总；静默时段不推
     slot = _get_scheduled_slot()
     if (
         not quiet_now
@@ -1361,7 +1351,7 @@ def main():
             ]
         elif slot == (9, 30):
             rows = [(l, t, ps, c, a, su) for l, t, ps, c, a, su in rows if _is_in_930_window(_parse_published_to_beijing(ps))]
-        elif slot == (15, 30):
+        elif slot in ((12, 0), (15, 30), (17, 30)):
             rows = [(l, t, ps, c, a, su) for l, t, ps, c, a, su in rows if _is_today_beijing(_parse_published_to_beijing(ps))]
         elif force_timed_digest:
             rows = [(l, t, ps, c, a, su) for l, t, ps, c, a, su in rows if _is_today_beijing(_parse_published_to_beijing(ps))]
@@ -1397,7 +1387,7 @@ def main():
             hint = "（含昨天）" if include_yesterday else ""
             print(f"定时推送: 0 条{hint}（无待推送文章，可能已推送过）")
     elif mode is None and not new_realtime and not quiet_now:
-        print("提示: 当前不在轮巡时段(北京 6/12/18 整点) 或 定时档(9:30/15:30)；实时两类在轮巡/定时；定时档六类在 9:30/15:30。使用 python main.py --push-now 仅推定时档，或 python main.py --push-all-now 全量推送。")
+        print("提示: 当前不在轮巡时段(北京 6/12/18 整点) 或 定时档(9:30/12:00/15:30/17:30)；实时两类在轮巡/定时；定时档六类在上述定时点。使用 python main.py --push-now 仅推定时档，或 python main.py --push-all-now 全量推送。")
 
     conn.close()
     print("完成")
