@@ -6,6 +6,26 @@ import os
 # 企业微信机器人 Webhook 地址（也可用环境变量 WECHAT_WEBHOOK）
 WECHAT_WEBHOOK = os.getenv("WECHAT_WEBHOOK") or "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
 
+# 监管机构预警推送时 @ 的成员 userid（群机器人 text 的 mentioned_list）
+# GitHub Secret「WECHAT_REGULATORY_MENTION_USERIDS」：["wangxuyang","qinxiaoxia"] 或逗号分隔
+def _parse_str_list_env(name: str, default=None):
+    raw = (os.getenv(name) or "").strip()
+    if raw:
+        try:
+            v = json.loads(raw)
+            if isinstance(v, list):
+                return [str(x).strip() for x in v if str(x).strip()]
+        except json.JSONDecodeError:
+            pass
+        return [x.strip() for x in raw.split(",") if x.strip()]
+    return list(default or [])
+
+
+WECHAT_REGULATORY_MENTION_USERIDS = _parse_str_list_env(
+    "WECHAT_REGULATORY_MENTION_USERIDS",
+    ["wangxuyang", "qinxiaoxia"],
+)
+
 # WeWe RSS 地址（用于识别公众号来源，规则分类仅对公众号生效）
 WEWE_RSS_URL = os.getenv("WEWE_RSS_URL") or "https://eason727.zeabur.app/feeds/all.atom"
 

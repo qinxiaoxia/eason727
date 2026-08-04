@@ -1087,18 +1087,34 @@ def send_wechat_per_category(webhook, items_by_category):
             continue
         if i > 0:
             time.sleep(0.3)
-        # 监管机构预警：重点防范类若有有效 IOC 则用特殊格式，否则用基础格式
+        # 监管机构预警：重点防范类若有有效 IOC 则用特殊格式，否则用基础格式；均可 @ 值班同事
         if category == "监管机构预警":
+            mentions = _regulatory_mention_userids()
             ioc_items = [x for x in items if _is_ioc_alert_item(x)]
             normal_items = [x for x in items if not _is_ioc_alert_item(x)]
             for item in ioc_items:
                 time.sleep(0.3)
                 content = _build_ioc_push_content(item)
                 if content:
-                    send_wechat(webhook, content, use_markdown=False)
+                    send_wechat(
+                        webhook,
+                        content,
+                        use_markdown=False,
+                        mention_userids=mentions,
+                    )
                 else:
                     normal_items.append(item)  # 无有效 IOC，并入基础格式
             items = normal_items
+            if items:
+                content = _build_single_category_content(category, items)
+                # text + mentioned_list 才能可靠 @；有配置时监管预警走 text
+                send_wechat(
+                    webhook,
+                    content,
+                    use_markdown=not bool(mentions),
+                    mention_userids=mentions or None,
+                )
+            continue
         if items:
             content = _build_single_category_content(category, items)
             send_wechat(webhook, content)
@@ -1123,9 +1139,33 @@ def _split_by_bytes(content, max_bytes):
     return chunks
 
 
-def send_wechat(webhook, content, use_markdown=True):
-    """发送到企业微信（按字节分片，单条间隔 0.3s 防限流）"""
+def _regulatory_mention_userids():
+    """监管机构预警 @ 的企微 userid 列表。"""
+    try:
+        from config import WECHAT_REGULATORY_MENTION_USERIDS
+        ids = WECHAT_REGULATORY_MENTION_USERIDS
+        if isinstance(ids, (list, tuple)):
+            return [str(x).strip() for x in ids if str(x).strip()]
+    except ImportError:
+        pass
+    raw = (os.getenv("WECHAT_REGULATORY_MENTION_USERIDS") or "").strip()
+    if not raw:
+        return []
+    try:
+        v = json.loads(raw)
+        if isinstance(v, list):
+            return [str(x).strip() for x in v if str(x).strip()]
+    except json.JSONDecodeError:
+        pass
+    return [x.strip() for x in raw.split(",") if x.strip()]
+
+
+def send_wechat(webhook, content, use_markdown=True, mention_userids=None):
+    """发送到企业微信（按字节分片，单条间隔 0.3s 防限流）。
+    mention_userids：仅 text 消息生效（监管机构预警 @ 同事）。
+    """
     chunks = _split_by_bytes(content, MAX_CONTENT_BYTES)
+    mentions = [str(x).strip() for x in (mention_userids or []) if str(x).strip()]
 
     for i, chunk in enumerate(chunks):
         if i > 0:
@@ -1133,13 +1173,19 @@ def send_wechat(webhook, content, use_markdown=True):
         if use_markdown:
             payload = {"msgtype": "markdown", "markdown": {"content": chunk}}
         else:
-            payload = {"msgtype": "text", "text": {"content": chunk}}
+            text_body = {"content": chunk}
+            # 仅第一条带 @，避免分片重复提醒
+            if mentions and i == 0:
+                text_body["mentioned_list"] = mentions
+            payload = {"msgtype": "text", "text": text_body}
         try:
             r = requests.post(webhook, json=payload, timeout=10)
             r.raise_for_status()
             j = r.json()
             if j.get("errcode") != 0:
                 print(f"企业微信返回错误: {j}")
+            elif mentions and i == 0 and not use_markdown:
+                print(f"已 @ 成员: {', '.join(mentions)}", flush=True)
         except Exception as e:
             print(f"发送失败: {e}")
             raise
@@ -1459,7 +1505,12 @@ def test_ioc():
     if content:
         print("--- 有有效 IOC，特殊格式 ---")
         print(content)
-        send_wechat(WECHAT_WEBHOOK, content, use_markdown=False)
+        send_wechat(
+            WECHAT_WEBHOOK,
+            content,
+            use_markdown=False,
+            mention_userids=_regulatory_mention_userids(),
+        )
         print("✓ 已推送（特殊格式）")
     else:
         print("--- 无有效 IOC，按基础格式 ---")
