@@ -54,8 +54,8 @@ SCHEDULED_PUSH_TIMES = [(9, 30), (12, 0), (15, 30), (17, 30)]
 # 定时档时间窗口（± 分钟）
 SCHEDULED_WINDOW_MINUTES = 2
 
-# 轮巡（仅「实时两类」）：北京 6、12、18 整点（跳过 8/14 以省 LLM；20:00–次日 6:00 静默不推），须与 zeabur-cron-trigger 一致
-POLL_HOURS_BEIJING = (6, 12, 18)
+# 轮巡（仅「实时两类」）：北京 6、18 整点（12:00 改由定时档同跑实时+六类，避免双跑）
+POLL_HOURS_BEIJING = (6, 18)
 # 整点后若干分钟内视为本轮轮巡（容错 GitHub Actions 延迟）
 POLL_WINDOW_MINUTES = 5
 

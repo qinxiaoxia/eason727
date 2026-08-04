@@ -4,7 +4,7 @@
 
 | 目标 workflow | 北京时间 | 说明 |
 |---------------|----------|------|
-| `rss-push.yml`（默认） | **6、12、18** 整点 | 轮巡 + 实时两类 |
+| `rss-push.yml`（默认） | **6、18** 整点 | 轮巡 + 实时两类（12:00 改由定时档覆盖） |
 | `rss-push-timed.yml`（默认） | **9:30、12:00、15:30、17:30** | 定时六类（+ 实时两类同跑） |
 
 仓库里的 `.github/workflows/rss-push*.yml` 应 **只保留 `workflow_dispatch`**（及可选 `repository_dispatch`），**不要**再写 `on.schedule`。

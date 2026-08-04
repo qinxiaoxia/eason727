@@ -1,6 +1,6 @@
 # RSS 推送到企业微信（轮巡）
-# - 北京 6、12、18 整点轮巡（跳过 8/14 以省 LLM；与定时档错峰部分重叠于 12:00）；实时两类（20:00–次日 6:00 静默不推）
-# - 北京 9:30 / 12:00 / 15:30 / 17:30 定时档：见 rss-push-timed.yml（与轮巡拆分，减少同文件多 cron 漏跑）
+# - 北京 6、18 整点轮巡（12:00 仅走定时档，避免双跑）；实时两类（20:00–次日 6:00 静默不推）
+# - 北京 9:30 / 12:00 / 15:30 / 17:30 定时档：见 rss-push-timed.yml（与轮巡拆分）
 # - 推送后标记已推送，避免重复
 # Secrets: WECHAT_WEBHOOK, FEEDS_JSON (必填) | LLM_* / WECHAT_REGULATORY_MENTION_USERIDS (可选)
 name: RSS Push
@@ -43,7 +43,8 @@ jobs:
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
           LLM_MODEL: ${{ secrets.LLM_MODEL }}
           NOISE_LLM_REVIEW: "1"
-          # 可选：RSS_PUSH_MODE=poll|scheduled 强制本轮只跑轮巡或只跑定时；留空则按北京时间自动判断
+          # 强制轮巡：避免 12:00 等与定时档重叠时被 _get_run_mode 误判为 scheduled
+          RSS_PUSH_MODE: poll
           PUSH_SCHEDULED_NOW: ""
         run: |
           cd rss-wechat-pusher

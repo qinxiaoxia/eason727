@@ -40,7 +40,8 @@ jobs:
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
           LLM_MODEL: ${{ secrets.LLM_MODEL }}
           NOISE_LLM_REVIEW: "1"
-          # 与仅按时钟判断相比，显式标记「本轮为定时汇总」，延迟错过 slot 窗口时仍能走四类逻辑
+          RSS_PUSH_MODE: scheduled
+          # 与仅按时钟判断相比，显式标记「本轮为定时汇总」，延迟错过 slot 窗口时仍能走定时档逻辑
           PUSH_SCHEDULED_NOW: "1"
         run: |
           cd rss-wechat-pusher
