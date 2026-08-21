@@ -1165,9 +1165,12 @@ def _regulatory_mention_userids():
 def send_wechat(webhook, content, use_markdown=True, mention_userids=None):
     """发送到企业微信（按字节分片，单条间隔 0.3s 防限流）。
     mention_userids：仅 text 消息生效（监管机构预警 @ 同事）。
+    网络超时/连接失败时自动重试，避免偶发抖动导致整轮定时失败。
     """
     chunks = _split_by_bytes(content, MAX_CONTENT_BYTES)
     mentions = [str(x).strip() for x in (mention_userids or []) if str(x).strip()]
+    max_attempts = 3
+    post_timeout = 20
 
     for i, chunk in enumerate(chunks):
         if i > 0:
@@ -1180,17 +1183,28 @@ def send_wechat(webhook, content, use_markdown=True, mention_userids=None):
             if mentions and i == 0:
                 text_body["mentioned_list"] = mentions
             payload = {"msgtype": "text", "text": text_body}
-        try:
-            r = requests.post(webhook, json=payload, timeout=10)
-            r.raise_for_status()
-            j = r.json()
-            if j.get("errcode") != 0:
-                print(f"企业微信返回错误: {j}")
-            elif mentions and i == 0 and not use_markdown:
-                print(f"已 @ 成员: {', '.join(mentions)}", flush=True)
-        except Exception as e:
-            print(f"发送失败: {e}")
-            raise
+        last_err = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                r = requests.post(webhook, json=payload, timeout=post_timeout)
+                r.raise_for_status()
+                j = r.json()
+                if j.get("errcode") != 0:
+                    print(f"企业微信返回错误: {j}")
+                elif mentions and i == 0 and not use_markdown:
+                    print(f"已 @ 成员: {', '.join(mentions)}", flush=True)
+                last_err = None
+                break
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                last_err = e
+                print(f"发送失败（第 {attempt}/{max_attempts} 次）: {e}", flush=True)
+                if attempt < max_attempts:
+                    time.sleep(2 * attempt)
+            except Exception as e:
+                print(f"发送失败: {e}")
+                raise
+        if last_err is not None:
+            raise last_err
 
 
 def is_scheduled_time():
