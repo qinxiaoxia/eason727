@@ -30,6 +30,9 @@ jobs:
       - name: Run RSS Push
         env:
           WECHAT_WEBHOOK: ${{ secrets.WECHAT_WEBHOOK }}
+          WECHAT_WEBHOOK_COLLECTOR: ${{ secrets.WECHAT_WEBHOOK_COLLECTOR }}
+          WECHAT_COLLECTOR_BOT_ID: ${{ secrets.WECHAT_COLLECTOR_BOT_ID }}
+          WECHAT_COLLECTOR_BOT_SECRET: ${{ secrets.WECHAT_COLLECTOR_BOT_SECRET }}
           WECHAT_REGULATORY_MENTION_USERIDS: ${{ secrets.WECHAT_REGULATORY_MENTION_USERIDS }}
           FEEDS_JSON: ${{ secrets.FEEDS_JSON }}
           FREEBUF_RSS_MIRROR: ${{ secrets.FREEBUF_RSS_MIRROR }}

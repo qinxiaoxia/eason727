@@ -25,6 +25,7 @@ from bs4 import BeautifulSoup
 try:
     from config import (
         WECHAT_WEBHOOK,
+        WECHAT_WEBHOOK_COLLECTOR,
         FEEDS,
         SCHEDULED_PUSH_TIMES,
         SCHEDULED_WINDOW_MINUTES,
@@ -46,6 +47,12 @@ except ImportError:
     feeds_json = os.getenv("FEEDS_JSON")
     if webhook and feeds_json:
         WECHAT_WEBHOOK = webhook
+        WECHAT_WEBHOOK_COLLECTOR = (os.getenv("WECHAT_WEBHOOK_COLLECTOR") or "").strip()
+        _cid = (os.getenv("WECHAT_COLLECTOR_BOT_ID") or "").strip()
+        if not WECHAT_WEBHOOK_COLLECTOR and _cid:
+            WECHAT_WEBHOOK_COLLECTOR = (
+                f"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key={_cid}"
+            )
         FEEDS = [(u, t) for u, t in json.loads(feeds_json)]
         SCHEDULED_PUSH_TIMES = [(9, 30), (12, 0), (15, 30), (17, 30)]
         SCHEDULED_WINDOW_MINUTES = 5
@@ -1162,11 +1169,20 @@ def _regulatory_mention_userids():
     return [x.strip() for x in raw.split(",") if x.strip()]
 
 
-def send_wechat(webhook, content, use_markdown=True, mention_userids=None):
-    """发送到企业微信（按字节分片，单条间隔 0.3s 防限流）。
-    mention_userids：仅 text 消息生效（监管机构预警 @ 同事）。
-    网络超时/连接失败时自动重试，避免偶发抖动导致整轮定时失败。
-    """
+def _collector_webhook_url():
+    """采集群 webhook；未配置则返回空字符串。"""
+    try:
+        url = (WECHAT_WEBHOOK_COLLECTOR or "").strip()
+    except NameError:
+        url = (os.getenv("WECHAT_WEBHOOK_COLLECTOR") or "").strip()
+        bot_id = (os.getenv("WECHAT_COLLECTOR_BOT_ID") or "").strip()
+        if not url and bot_id:
+            url = f"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key={bot_id}"
+    return url
+
+
+def _send_wechat_to_url(webhook, content, use_markdown=True, mention_userids=None):
+    """向指定 webhook 发送；失败则抛出异常。"""
     chunks = _split_by_bytes(content, MAX_CONTENT_BYTES)
     mentions = [str(x).strip() for x in (mention_userids or []) if str(x).strip()]
     max_attempts = 3
@@ -1179,7 +1195,6 @@ def send_wechat(webhook, content, use_markdown=True, mention_userids=None):
             payload = {"msgtype": "markdown", "markdown": {"content": chunk}}
         else:
             text_body = {"content": chunk}
-            # 仅第一条带 @，避免分片重复提醒
             if mentions and i == 0:
                 text_body["mentioned_list"] = mentions
             payload = {"msgtype": "text", "text": text_body}
@@ -1205,6 +1220,18 @@ def send_wechat(webhook, content, use_markdown=True, mention_userids=None):
                 raise
         if last_err is not None:
             raise last_err
+
+
+def send_wechat(webhook, content, use_markdown=True, mention_userids=None):
+    """发送到主群 webhook；若配置了采集群则同步发送相同内容（采集失败不影响主群）。"""
+    _send_wechat_to_url(webhook, content, use_markdown, mention_userids)
+    collector = _collector_webhook_url()
+    if collector and collector.rstrip("/") != (webhook or "").rstrip("/"):
+        try:
+            _send_wechat_to_url(collector, content, use_markdown, mention_userids)
+            print("已同步至采集群机器人", flush=True)
+        except Exception as e:
+            print(f"采集群发送失败（不影响主群）: {e}", flush=True)
 
 
 def is_scheduled_time():

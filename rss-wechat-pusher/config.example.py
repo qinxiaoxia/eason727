@@ -6,6 +6,19 @@ import os
 # 企业微信机器人 Webhook 地址（也可用环境变量 WECHAT_WEBHOOK）
 WECHAT_WEBHOOK = os.getenv("WECHAT_WEBHOOK") or "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
 
+# 采集群机器人（可选）：与主群推送内容、格式完全一致；未配置则只发主群
+# GitHub Secrets 任选其一：
+#   WECHAT_WEBHOOK_COLLECTOR — 完整 webhook URL
+#   WECHAT_COLLECTOR_BOT_ID  — 仅 key，自动拼成 .../webhook/send?key=
+# WECHAT_COLLECTOR_BOT_SECRET 标准群 webhook 发送不用；留作对接/备注，勿提交仓库
+WECHAT_WEBHOOK_COLLECTOR = (os.getenv("WECHAT_WEBHOOK_COLLECTOR") or "").strip()
+_collector_bot_id = (os.getenv("WECHAT_COLLECTOR_BOT_ID") or "").strip()
+if not WECHAT_WEBHOOK_COLLECTOR and _collector_bot_id:
+    WECHAT_WEBHOOK_COLLECTOR = (
+        f"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key={_collector_bot_id}"
+    )
+WECHAT_COLLECTOR_BOT_SECRET = (os.getenv("WECHAT_COLLECTOR_BOT_SECRET") or "").strip()
+
 # 监管机构预警推送时 @ 的成员 userid（群机器人 text 的 mentioned_list）
 # GitHub Secret「WECHAT_REGULATORY_MENTION_USERIDS」：["wangxuyang","qinxiaoxia"] 或逗号分隔
 def _parse_str_list_env(name: str, default=None):
