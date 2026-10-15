@@ -75,29 +75,29 @@ POLL_WINDOW_MINUTES = 5
 # 大模型分类 / 翻译（快模型）；IOC 提取见 LLM_IOC_MODELS
 LLM_API_KEY = os.getenv("LLM_API_KEY") or ""
 LLM_BASE_URL = os.getenv("LLM_BASE_URL") or "https://dashscope.aliyuncs.com/compatible-mode/v1"
-LLM_MODEL = os.getenv("LLM_MODEL") or "qwen-turbo"
-# GitHub Secret「LLM_MODELS_JSON」示例：["qwen-turbo"]
+LLM_MODEL = os.getenv("LLM_MODEL") or "qwen-plus"
+# GitHub Secret「LLM_MODELS_JSON」示例：["qwen-plus"]
 _llm_models_json = os.getenv("LLM_MODELS_JSON")
 try:
     LLM_MODELS = json.loads(_llm_models_json) if _llm_models_json else []
 except json.JSONDecodeError:
     LLM_MODELS = []
 if not LLM_MODELS:
-    LLM_MODELS = ["qwen-turbo"]
+    LLM_MODELS = ["qwen-plus"]
 
-# 监管机构 IOC 提取（慢/强模型）；GitHub Secret「LLM_IOC_MODELS_JSON」示例：["qwen3.7-plus"]
+# 监管机构 IOC 提取；GitHub Secret「LLM_IOC_MODELS_JSON」示例：["qwen-plus"]
 _llm_ioc_models_json = os.getenv("LLM_IOC_MODELS_JSON")
 try:
     LLM_IOC_MODELS = json.loads(_llm_ioc_models_json) if _llm_ioc_models_json else []
 except json.JSONDecodeError:
     LLM_IOC_MODELS = []
 if not LLM_IOC_MODELS:
-    LLM_IOC_MODELS = ["qwen3.7-plus"]
+    LLM_IOC_MODELS = ["qwen-plus"]
 
 # 纯英文标题自动翻译为中文（需配置 LLM）
 # 勿使用「数学专用」等不适配 NLP 的模型名做翻译，易拒答或重复输出
 TRANSLATE_ENABLED = True
 
-# 公众号噪声：规则未命中时用 turbo 复核是否属网安/AI 情报（见 classifier.exclusion_reason）
+# 公众号噪声：规则未命中时用分类模型复核是否属网安/AI 情报（见 classifier.exclusion_reason）
 # 环境变量 NOISE_LLM_REVIEW=0 关闭；=all 时对全部 RSS 源复核
 NOISE_LLM_REVIEW = os.getenv("NOISE_LLM_REVIEW", "").strip().lower() not in ("0", "false", "no", "off")
