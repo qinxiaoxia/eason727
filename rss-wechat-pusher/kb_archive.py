@@ -81,17 +81,27 @@ def _strip_tags(s: str) -> str:
     return re.sub(r"<[^>]+>", " ", s or "")
 
 
+_CAT_SLUGS = {
+    "监管机构预警": "regulatory",
+    "重大安全事件": "incident",
+    "漏洞信息": "vuln",
+    "网安新闻资讯": "news",
+    "网安赛事资讯": "contest",
+    "AI行业资讯": "ai-industry",
+    "AI与信息安全技术": "ai-security",
+    "其他资讯": "other",
+    "未分类": "uncat",
+}
+
+
 def _cat_file_slug(cat: str) -> str:
-    """分类页文件名（URL 安全）。"""
+    """分类页文件名：仅 ASCII，避免 OSS 中文路径 403。"""
     import hashlib
-    import urllib.parse
 
     raw = (cat or "未分类").strip() or "未分类"
-    # 中文用 quote，避免 OSS/企微对路径编码不一致
-    q = urllib.parse.quote(raw, safe="")
-    if len(q) > 80:
-        q = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
-    return q
+    if raw in _CAT_SLUGS:
+        return _CAT_SLUGS[raw]
+    return "c-" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10]
 
 
 def _render_cards(items: List[Dict[str, Any]], limit: int = 500) -> str:
