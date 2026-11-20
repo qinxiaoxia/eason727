@@ -71,7 +71,11 @@ def upload_html(object_key: str, html: str | bytes, *, public_read: bool = True)
             "OSS_BUCKET / OSS_ENDPOINT（及可选 OSS_PUBLIC_BASE_URL）"
         )
     data = html.encode("utf-8") if isinstance(html, str) else html
-    headers = {"Content-Type": "text/html; charset=utf-8"}
+    headers = {
+        "Content-Type": "text/html; charset=utf-8",
+        # 避免浏览器当成附件下载，领导点开应直接看正文
+        "Content-Disposition": "inline",
+    }
     if public_read:
         headers["x-oss-object-acl"] = "public-read"
     bucket = _bucket()
