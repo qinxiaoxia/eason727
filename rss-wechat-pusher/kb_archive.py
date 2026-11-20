@@ -11,15 +11,14 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from oss_utils import (
-    download_bytes,
     kb_prefix,
     oss_enabled,
-    oss_public_url,
     upload_html,
     upload_json,
 )
@@ -68,14 +67,87 @@ def _group_by_day(items: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]
     return by
 
 
+def _html_esc(s: str) -> str:
+    return (
+        (s or "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def _strip_tags(s: str) -> str:
+    return re.sub(r"<[^>]+>", " ", s or "")
+
+
 def _build_search_html(catalog: List[Dict[str, Any]]) -> str:
     """
-    把目录内嵌进页面，避免手机企微再 fetch catalog.json（OSS 常强制 attachment，请求会挂死，
-    且原先搜索按钮要等加载成功才绑定，所以一直转圈、点搜索也没反应）。
+    服务端直接渲染条目列表（不依赖 JS）。
+    阿里云默认域名对 HTML 强制 attachment，企微里脚本经常不执行，
+    原先「正在准备…」+ 客户端渲染会一直卡住。
     """
-    # </script> 拆开，防止标题摘要里出现该串打断脚本
-    payload = json.dumps(catalog, ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e")
-    payload = payload.replace("</script>", "<\\/script>")
+    # 轻量目录：去 HTML 标签，缩短摘要，供可选增强脚本使用
+    light: List[Dict[str, Any]] = []
+    for it in catalog:
+        light.append(
+            {
+                "t": (it.get("title") or "")[:200],
+                "s": _strip_tags(it.get("summary") or "")[:160],
+                "c": it.get("category") or "",
+                "a": (it.get("author") or "")[:40],
+                "l": it.get("link") or "",
+                "d": it.get("day") or "",
+                "p": (it.get("published_str") or "")[:16],
+            }
+        )
+
+    cats = sorted({x["c"] for x in light if x["c"]})
+    cat_opts = "".join(f'<option value="{_html_esc(c)}">{_html_esc(c)}</option>' for c in cats)
+
+    cards = []
+    for it in light[:500]:
+        blob = _html_esc(f"{it['t']} {it['s']} {it['c']} {it['a']}".lower())
+        cards.append(
+            f'<div class="card" data-blob="{blob}">'
+            f'<h3><span class="cat">{_html_esc(it["c"] or "未分类")}</span>{_html_esc(it["t"])}</h3>'
+            f'<div class="meta">{_html_esc(it["d"])} · {_html_esc(it["a"])} · {_html_esc(it["p"])}</div>'
+            f'<p class="sum">{_html_esc(it["s"])}</p>'
+            f'<a href="{_html_esc(it["l"])}" target="_blank" rel="noopener">原文链接</a>'
+            f"</div>"
+        )
+    cards_html = "\n".join(cards) or '<div class="empty">暂无归档</div>'
+
+    # 可选增强：过滤已渲染卡片（失败也不影响阅读）
+    enhance = """
+<script>
+(function(){
+  try{
+    var qEl=document.getElementById('q');
+    var catEl=document.getElementById('cat');
+    var stats=document.getElementById('stats');
+    var cards=[].slice.call(document.querySelectorAll('.card[data-blob]'));
+    function run(){
+      var q=(qEl&&qEl.value||'').trim().toLowerCase().split(/\\s+/).filter(Boolean);
+      var cat=catEl&&catEl.value||'';
+      var n=0;
+      cards.forEach(function(el){
+        var blob=(el.getAttribute('data-blob')||'');
+        var ok=(!cat||blob.indexOf(cat.toLowerCase())>=0);
+        if(ok&&q.length){ok=q.every(function(p){return blob.indexOf(p)>=0;});}
+        el.style.display=ok?'':'none';
+        if(ok)n++;
+      });
+      if(stats)stats.textContent='共 '+cards.length+' 条，当前显示 '+n+' 条';
+    }
+    if(document.getElementById('go'))document.getElementById('go').onclick=run;
+    if(qEl)qEl.addEventListener('keydown',function(e){if(e.key==='Enter')run();});
+    if(catEl)catEl.onchange=run;
+    run();
+  }catch(e){}
+})();
+</script>
+"""
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -94,6 +166,7 @@ input{{width:min(420px,100%);box-sizing:border-box}}
 .card{{background:#fff;border:1px solid #e5e5e5;border-radius:8px;padding:12px 14px;margin:0 0 10px}}
 .card h3{{font-size:1rem;margin:0 0 6px;line-height:1.4}}
 .meta{{font-size:.8rem;color:#666}}
+.sum{{font-size:.9rem;margin:8px 0 6px;white-space:pre-wrap;color:#333}}
 .cat{{display:inline-block;background:#eef5fb;color:#1a6fb5;padding:1px 6px;border-radius:4px;margin-right:6px}}
 a{{color:#06c;word-break:break-all}}
 .empty{{color:#888;padding:24px 0}}
@@ -101,55 +174,17 @@ a{{color:#06c;word-break:break-all}}
 </head>
 <body>
 <h1>网安情报知识库</h1>
-<p class="sub">检索已归档资讯。关键词匹配标题 / 摘要 / 分类 / 来源。</p>
+<p class="sub">已归档 {len(light)} 条。下方列表可直接浏览；若搜索框可用，可按关键词过滤。</p>
 <div class="row">
-  <input id="q" type="search" placeholder="输入关键词，如：银行 勒索 CVE" autofocus/>
-  <select id="cat"><option value="">全部分类</option></select>
-  <button id="go" type="button">搜索</button>
+  <input id="q" type="search" placeholder="关键词，如：银行 勒索 CVE"/>
+  <select id="cat"><option value="">全部分类</option>{cat_opts}</select>
+  <button id="go" type="button">筛选</button>
 </div>
-<div id="stats"></div>
-<div id="list" class="empty">正在准备…</div>
-<script>
-window.__KB_CATALOG__ = {payload};
-(function(){{
-  const items = Array.isArray(window.__KB_CATALOG__) ? window.__KB_CATALOG__ : [];
-  const listEl = document.getElementById('list');
-  const statsEl = document.getElementById('stats');
-  const catEl = document.getElementById('cat');
-  function esc(s){{return String(s||'').replace(/[&<>"']/g,c=>({{ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }}[c]));}}
-  function render(rows){{
-    statsEl.textContent = '共 ' + items.length + ' 条，当前显示 ' + rows.length + ' 条';
-    if(!rows.length){{ listEl.innerHTML = '<div class="empty">无匹配结果</div>'; return; }}
-    listEl.innerHTML = rows.slice(0,200).map(it => `
-      <div class="card">
-        <h3><span class="cat">${{esc(it.category||'未分类')}}</span>${{esc(it.title)}}</h3>
-        <div class="meta">${{esc(it.day||'')}} · ${{esc(it.author||'')}} · ${{esc((it.published_str||'').slice(0,16))}}</div>
-        <p style="font-size:.9rem;margin:8px 0 6px;white-space:pre-wrap">${{esc((it.summary||'').slice(0,220))}}</p>
-        <a href="${{esc(it.link)}}" target="_blank" rel="noopener">原文链接</a>
-      </div>`).join('');
-  }}
-  function search(){{
-    const q = (document.getElementById('q').value||'').trim().toLowerCase();
-    const cat = catEl.value;
-    let rows = items;
-    if(cat) rows = rows.filter(it => (it.category||'') === cat);
-    if(q){{
-      const parts = q.split(/\\s+/).filter(Boolean);
-      rows = rows.filter(it => {{
-        const blob = ((it.title||'')+' '+(it.summary||'')+' '+(it.category||'')+' '+(it.author||'')).toLowerCase();
-        return parts.every(p => blob.includes(p));
-      }});
-    }}
-    render(rows);
-  }}
-  const cats = [...new Set(items.map(i=>i.category).filter(Boolean))].sort();
-  cats.forEach(c=>{{ const o=document.createElement('option'); o.value=c; o.textContent=c; catEl.appendChild(o); }});
-  document.getElementById('go').onclick = search;
-  document.getElementById('q').addEventListener('keydown', e=>{{ if(e.key==='Enter') search(); }});
-  catEl.onchange = search;
-  search();
-}})();
-</script>
+<div id="stats">共 {len(light)} 条（先显示前 {min(500, len(light))} 条）</div>
+<div id="list">
+{cards_html}
+</div>
+{enhance}
 </body>
 </html>
 """
