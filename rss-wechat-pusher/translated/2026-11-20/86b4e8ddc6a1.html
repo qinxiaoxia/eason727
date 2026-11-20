@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>GhostMap eBPF 恶意软件技术解析与检测</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}
+h1{font-size:1.25rem;margin:0 0 12px;line-height:1.4}
+.meta{font-size:.9rem;color:#555;margin:0 0 20px}
+.meta a{color:#06c;word-break:break-all}
+h2{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}
+p{margin:0 0 12px;white-space:pre-wrap}
+ul{margin:0;padding-left:1.2em}
+li{margin:6px 0}
+.foot{margin-top:28px;font-size:.8rem;color:#888}
+</style>
+</head>
+<body>
+<h1>GhostMap eBPF 恶意软件技术解析与检测</h1>
+<p class="meta">时间：2026-11-20 12:07<br/>来源：来源：奇安信威胁情报中心公众号<br/>原文：<a href="https://mp.weixin.qq.com/s/zcy-gJZkbfTxWYSOdgc2Mw">https://mp.weixin.qq.com/s/zcy-gJZkbfTxWYSOdgc2Mw</a></p>
+<h2>中文摘要</h2>
+<p>Aqua Nautilus的研究揭示了一个名为GhostMap的eBPF Rootkit，该组件被发现于2026年6月针对npm和Arch AUR生态系统的两次独立供应链攻击中。GhostMap的核心功能是通过篡改内核数据来实现进程、文件和套接字的隐身，让常规工具如ps和lsof无法检测到恶意活动。它并非独立传播，而是作为IronWorm等更大植入体的一部分，负责隐匿与反调试。研究详细拆解了其工作原理：在Linux的/proc虚拟文件系统中，通过修改d_reclen字段仅一个字节，就可使进程或套接字条目“消失”；在网络方面，则通过干扰Netlink消息来隐藏监听端口。GhostMap还具备反调试能力，会杀死试图附加的调试器。尽管其隐蔽性极强，但开源安全工具Tracee成功检测到了其挂载行为。报告为防守方提供了详细的应对建议，包括交叉验证不同视图的数据、检查BPF程序、取证时保留扩展属性等。</p>
+<h2>要点</h2>
+<ul>
+<li>GhostMap是一个嵌入在npm平台IronW Worm和Arch AUR Atomic Arch两起供应链攻击中的eBPF Rootkit，用于隐藏恶意进程、文件和套接字。</li>
+<li>该Rootkit通过篡改内核数据（如修改/proc目录读取缓冲区中的长度字段）来实现隐身，而非删除数据，使得ps、lsof等常用工具失效。</li>
+<li>GhostMap不负责外发通信，而是作为本地收集器（监听127.0.0.1:8738）的隐藏模块，并能通过SIGKILL阻止外部调试器进行分析。</li>
+<li>研究表明，单一的空搜索结果不能作为排除恶意活动的证据，应交叉核对/proc直接访问、历史遥测和BPF挂载记录。</li>
+<li>防守方应使用运行时安全工具（如Tracee）监控异常的BPF程序（特别是具有bpf_probe_write_user能力的），并取证时保留文件的扩展属性等元数据。</li>
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>

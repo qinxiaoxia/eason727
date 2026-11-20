@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>BlackNevas 滥用 vCenter 管理接口摧毁 ESXi 环境</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}
+h1{font-size:1.25rem;margin:0 0 12px;line-height:1.4}
+.meta{font-size:.9rem;color:#555;margin:0 0 20px}
+.meta a{color:#06c;word-break:break-all}
+h2{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}
+p{margin:0 0 12px;white-space:pre-wrap}
+ul{margin:0;padding-left:1.2em}
+li{margin:6px 0}
+.foot{margin-top:28px;font-size:.8rem;color:#888}
+</style>
+</head>
+<body>
+<h1>BlackNevas 滥用 vCenter 管理接口摧毁 ESXi 环境</h1>
+<p class="meta">时间：2026-11-20 12:07<br/>来源：来源：奇安信威胁情报中心公众号<br/>原文：<a href="https://mp.weixin.qq.com/s/zaf2Fi38tOKq8ybhn6lCjg">https://mp.weixin.qq.com/s/zaf2Fi38tOKq8ybhn6lCjg</a></p>
+<h2>中文摘要</h2>
+<p>卡巴斯基全球应急响应团队（GERT）披露了一起由勒索软件家族BlackNevas实施的、针对VMware虚拟化环境的破坏性攻击事件。攻击者利用从组织内部获取的凭据，通过合法管理接口对vCenter Server Appliance（VCSA）和ESXi主机进行操作，最终摧毁了整个虚拟化基础设施。整个攻击过程持续约十天，分为五个阶段：首先在VCSA上建立持久化通道；其次滥用vCenter Host Profiles功能开启被管理的ESXi主机的SSH访问；接着通过SFTP向ESXi投递并执行加密器；然后停止所有虚拟机以准备破坏；最后，在移除备份系统等恢复能力后引爆勒索载荷。该事件的关键在于，攻击者并未利用任何已知漏洞，而是通过接管管理信任链来实现批量破坏，凸显了传统终端监控在此类攻击中的盲区。</p>
+<h2>要点</h2>
+<ul>
+<li>BlackNevas勒索软件通过劫持合法凭据和管理接口，成功控制vCenter并摧毁整套ESXi环境，未利用Hypervisor漏洞。</li>
+<li>攻击链始于VCSA上的双通道持久化（SSH与MeshAgent），随后滥用Host Profiles开启ESXi SSH服务，为后续攻击铺平道路。</li>
+<li>攻击者在正式破坏前数小时执行自测命令，留下短暂但关键的预警窗口，防守方需关注异常日志组合信号。</li>
+<li>攻击策略包含先拆除恢复能力（关闭备份防病毒、加密备份服务器、阻断管理员访问），再引爆ESXi，使受害者在最需要时失去恢复路径。</li>
+<li>事件警示传统终端EDR无法有效监控ESXi层的恶意活动，防守重点应转向保护vCenter这一Tier 0资产，并将身份、管理面与恢复面进行物理隔离。</li>
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>
