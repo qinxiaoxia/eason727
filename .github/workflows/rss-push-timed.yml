@@ -22,7 +22,10 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -r rss-wechat-pusher/requirements.txt
+        run: |
+          pip install -r rss-wechat-pusher/requirements.txt
+          # 每日要点 PDF 中文字体
+          sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-cjk
 
       - name: Generate Yijinglab daily RSS (北京 9:30 档，每日一次)
         run: python rss-wechat-pusher/generate_yijinglab_feed.py
@@ -48,13 +51,22 @@ jobs:
           OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT }}
           OSS_PREFIX: ${{ secrets.OSS_PREFIX }}
           OSS_PUBLIC_BASE_URL: ${{ secrets.OSS_PUBLIC_BASE_URL }}
+          OSS_KB_PREFIX: ${{ secrets.OSS_KB_PREFIX }}
+          OSS_BRIEF_PREFIX: ${{ secrets.OSS_BRIEF_PREFIX }}
           NOISE_LLM_REVIEW: "1"
           RSS_PUSH_MODE: scheduled
           # 与仅按时钟判断相比，显式标记「本轮为定时汇总」，延迟错过 slot 窗口时仍能走定时档逻辑
           PUSH_SCHEDULED_NOW: "1"
+          # 北京 17–18 点触发的定时档顺便出「每日要点」PDF（Zeabur 17:30）
+          GENERATE_DAILY_BRIEF: ${{ secrets.GENERATE_DAILY_BRIEF }}
         run: |
           cd rss-wechat-pusher
           cp config.example.py config.py
+          # 若 Secret 未设：按北京时间在 17:00–18:59 自动打开每日要点
+          HOUR=$(TZ=Asia/Shanghai date +%H)
+          if [ -z "$GENERATE_DAILY_BRIEF" ] && [ "$HOUR" = "17" -o "$HOUR" = "18" ]; then
+            export GENERATE_DAILY_BRIEF=1
+          fi
           python main.py
 
       - name: Commit pushed state

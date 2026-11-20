@@ -1760,6 +1760,30 @@ def main():
     elif mode is None and not new_realtime and not quiet_now:
         print("提示: 当前不在轮巡时段(北京 6/18 整点) 或 定时档(9:30/12:00/15:30/17:30)；实时两类在轮巡/定时；定时档六类在上述定时点。使用 python main.py --push-now 仅推定时档，或 python main.py --push-all-now 全量推送。")
 
+    # 知识库：历史文章归档到 OSS（可检索）
+    try:
+        from kb_archive import sync_knowledge_base_if_enabled
+
+        sync_knowledge_base_if_enabled(conn)
+    except Exception as e:
+        print(f"[知识库] {e}", flush=True)
+
+    # 每日要点 PDF：17:30 档或 --daily-brief / GENERATE_DAILY_BRIEF=1
+    try:
+        from daily_brief import generate_daily_brief, maybe_run_end_of_day_brief
+
+        if "--daily-brief" in sys.argv or os.getenv("GENERATE_DAILY_BRIEF", "").strip() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        ):
+            generate_daily_brief(conn=conn, notify_wechat="--no-notify" not in sys.argv)
+        else:
+            maybe_run_end_of_day_brief(slot if mode == "scheduled" or force_timed_digest else None, conn)
+    except Exception as e:
+        print(f"[每日要点] {e}", flush=True)
+
     conn.close()
     print("完成")
 
@@ -1870,5 +1894,22 @@ if __name__ == "__main__":
         test_ioc()
     elif "--test-oss" in sys.argv:
         test_oss()
+    elif "--sync-kb" in sys.argv:
+        import sqlite3
+        from kb_archive import sync_knowledge_base
+
+        conn = sqlite3.connect(str(DB_PATH))
+        init_db(conn)
+        print(sync_knowledge_base(conn))
+        conn.close()
+    elif "--daily-brief-only" in sys.argv:
+        from daily_brief import generate_daily_brief
+
+        day = None
+        if "--date" in sys.argv:
+            i = sys.argv.index("--date")
+            if i + 1 < len(sys.argv):
+                day = sys.argv[i + 1]
+        generate_daily_brief(day, notify_wechat="--no-notify" not in sys.argv)
     else:
         main()

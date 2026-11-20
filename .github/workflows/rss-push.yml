@@ -52,6 +52,8 @@ jobs:
           OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT }}
           OSS_PREFIX: ${{ secrets.OSS_PREFIX }}
           OSS_PUBLIC_BASE_URL: ${{ secrets.OSS_PUBLIC_BASE_URL }}
+          OSS_KB_PREFIX: ${{ secrets.OSS_KB_PREFIX }}
+          OSS_BRIEF_PREFIX: ${{ secrets.OSS_BRIEF_PREFIX }}
           NOISE_LLM_REVIEW: "1"
           # 强制轮巡：避免 12:00 等与定时档重叠时被 _get_run_mode 误判为 scheduled
           RSS_PUSH_MODE: poll

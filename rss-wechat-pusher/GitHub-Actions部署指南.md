@@ -110,6 +110,23 @@ GitHub / jsDelivr 国内常打不开，摘要 HTML 上传到 OSS，企微只放�
 
 本地验证：`pip install -r requirements.txt && python main.py --test-oss`，用手机打开打印的 URL。
 
+### 知识库 + 每日要点 PDF（依赖同一套 OSS）
+
+每次推送跑完会把 `articles` 归档到桶内：
+
+- 检索页：`https://<OSS_PUBLIC_BASE_URL>/kb/search.html`
+- 按日数据：`kb/days/YYYY-MM-DD.json`
+- 每日要点：北京 **17:30** 定时档自动生成 `briefs/YYYY-MM-DD.pdf`，并推企微下载链接
+
+手动：
+
+```bash
+python main.py --sync-kb
+python main.py --daily-brief-only [--date 2026-03-20] [--no-notify]
+```
+
+可选 Secret：`OSS_KB_PREFIX`（默认 `kb/`）、`OSS_BRIEF_PREFIX`（默认 `briefs/`）。
+
 ---
 
 ## 第三步：确认 workflow 已存在

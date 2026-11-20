@@ -61,31 +61,96 @@ def _bucket():
     return oss2.Bucket(auth, endpoint, _cfg("OSS_BUCKET"))
 
 
-def upload_html(object_key: str, html: str | bytes, *, public_read: bool = True) -> str:
-    """
-    上传 HTML，返回公开 URL。失败抛异常。
-    """
+def upload_bytes(
+    object_key: str,
+    data: str | bytes,
+    *,
+    content_type: str = "application/octet-stream",
+    content_disposition: str | None = "inline",
+    public_read: bool = True,
+) -> str:
+    """上传任意字节，返回公开 URL。"""
     if not oss_enabled():
         raise RuntimeError(
             "未配置 OSS：请设置 OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET / "
             "OSS_BUCKET / OSS_ENDPOINT（及可选 OSS_PUBLIC_BASE_URL）"
         )
-    data = html.encode("utf-8") if isinstance(html, str) else html
-    headers = {
-        "Content-Type": "text/html; charset=utf-8",
-        # 避免浏览器当成附件下载，领导点开应直接看正文
-        "Content-Disposition": "inline",
-    }
+    raw = data.encode("utf-8") if isinstance(data, str) else data
+    headers = {"Content-Type": content_type}
+    if content_disposition:
+        headers["Content-Disposition"] = content_disposition
     if public_read:
         headers["x-oss-object-acl"] = "public-read"
-    bucket = _bucket()
     key = object_key.lstrip("/")
-    bucket.put_object(key, data, headers=headers)
+    _bucket().put_object(key, raw, headers=headers)
     return oss_public_url(key)
+
+
+def upload_html(object_key: str, html: str | bytes, *, public_read: bool = True) -> str:
+    """上传 HTML，返回公开 URL。"""
+    return upload_bytes(
+        object_key,
+        html,
+        content_type="text/html; charset=utf-8",
+        content_disposition="inline",
+        public_read=public_read,
+    )
+
+
+def upload_json(object_key: str, obj, *, public_read: bool = True) -> str:
+    import json
+
+    body = json.dumps(obj, ensure_ascii=False, indent=2)
+    return upload_bytes(
+        object_key,
+        body,
+        content_type="application/json; charset=utf-8",
+        content_disposition="inline",
+        public_read=public_read,
+    )
+
+
+def upload_pdf(object_key: str, pdf_bytes: bytes, *, public_read: bool = True) -> str:
+    """PDF 允许 attachment（领导下载阅读更自然）。"""
+    return upload_bytes(
+        object_key,
+        pdf_bytes,
+        content_type="application/pdf",
+        content_disposition='attachment; filename="brief.pdf"',
+        public_read=public_read,
+    )
+
+
+def download_bytes(object_key: str) -> bytes | None:
+    """下载对象；不存在返回 None。"""
+    if not oss_enabled():
+        return None
+    try:
+        import oss2
+
+        key = object_key.lstrip("/")
+        r = _bucket().get_object(key)
+        return r.read()
+    except Exception:
+        return None
 
 
 def upload_file(object_key: str, path: Path, *, public_read: bool = True) -> str:
     return upload_html(object_key, path.read_text(encoding="utf-8"), public_read=public_read)
+
+
+def kb_prefix() -> str:
+    p = _cfg("OSS_KB_PREFIX", "kb/")
+    if p and not p.endswith("/"):
+        p += "/"
+    return p.lstrip("/")
+
+
+def brief_prefix() -> str:
+    p = _cfg("OSS_BRIEF_PREFIX", "briefs/")
+    if p and not p.endswith("/"):
+        p += "/"
+    return p.lstrip("/")
 
 
 def test_upload_ping() -> str:
