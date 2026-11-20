@@ -1,11 +1,15 @@
 # 英文资讯 · 中文摘要
 
-推送机器人把英文稿正文提炼为约 300–500 字中文摘要 + 3–5 条要点，按日期落在本目录：
+摘要以 **HTML** 落盘（手机浏览器可直接看），路径：
 
-`YYYY-MM-DD/<链接sha1前12位>.md`
+`YYYY-MM-DD/<链接sha1前12位>.html`
 
-企业微信消息里会附 **中文摘要** 链接，形如：
+推送里的链接默认走 **jsDelivr**（不打开 github.com）：
 
-`https://github.com/<owner>/<repo>/blob/main/rss-wechat-pusher/translated/2026-03-20/abcdef123456.md`
+`https://cdn.jsdelivr.net/gh/qinxiaoxia/eason727@main/rss-wechat-pusher/translated/...`
 
-当前先用 GitHub 托管，方便你测国内打开是否流畅；若慢可再迁到 OSS / Zeabur 等。
+连通性自测页：
+
+`https://cdn.jsdelivr.net/gh/qinxiaoxia/eason727@main/rss-wechat-pusher/translated/ping.html`
+
+若 jsDelivr 仍慢/打不开，再改 `TRANSLATE_VIEW_BASE_URL` 指向 OSS / Zeabur 等。

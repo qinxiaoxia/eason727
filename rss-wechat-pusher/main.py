@@ -1060,21 +1060,33 @@ def _body_summary_enabled() -> bool:
 
 
 def _translate_view_base() -> str:
-    """摘要 Markdown 在 GitHub 上的 blob 前缀。"""
-    repo = (os.getenv("GITHUB_REPOSITORY") or "").strip()
-    if repo:
-        ref = (os.getenv("GITHUB_REF_NAME") or "").strip()
-        if not ref:
-            full = (os.getenv("GITHUB_REF") or "main").strip()
-            ref = full[len("refs/heads/") :] if full.startswith("refs/heads/") else full or "main"
-        return f"https://github.com/{repo}/blob/{ref}"
+    """摘要页公开访问前缀。默认走 jsDelivr（国内比 github.com 更易打开），不再用 blob 页。"""
     try:
         from config import TRANSLATE_VIEW_BASE_URL
         if TRANSLATE_VIEW_BASE_URL:
             return str(TRANSLATE_VIEW_BASE_URL).rstrip("/")
     except ImportError:
         pass
-    return "https://github.com/qinxiaoxia/eason727/blob/main"
+    env_base = (os.getenv("TRANSLATE_VIEW_BASE_URL") or "").strip().rstrip("/")
+    if env_base:
+        return env_base
+    repo = (os.getenv("GITHUB_REPOSITORY") or "qinxiaoxia/eason727").strip()
+    ref = (os.getenv("GITHUB_REF_NAME") or "").strip()
+    if not ref:
+        full = (os.getenv("GITHUB_REF") or "main").strip()
+        ref = full[len("refs/heads/") :] if full.startswith("refs/heads/") else full or "main"
+    # jsDelivr：/gh/<owner>/<repo>@<ref>/<path>
+    return f"https://cdn.jsdelivr.net/gh/{repo}@{ref}"
+
+
+def _html_escape(s: str) -> str:
+    return (
+        (s or "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
 
 
 def _summary_file_rel(link: str, published_str: str = "") -> str:
@@ -1082,7 +1094,8 @@ def _summary_file_rel(link: str, published_str: str = "") -> str:
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", day):
         day = _now_beijing().strftime("%Y-%m-%d")
     slug = hashlib.sha1((link or "").encode("utf-8")).hexdigest()[:12]
-    return f"rss-wechat-pusher/translated/{day}/{slug}.md"
+    # HTML：手机浏览器直接可读；jsDelivr 也能正确 Content-Type
+    return f"rss-wechat-pusher/translated/{day}/{slug}.html"
 
 
 _BODY_SUMMARY_SYSTEM = (
@@ -1120,9 +1133,53 @@ def _parse_body_summary_json(raw: str):
     return summary, bullets
 
 
+def _render_summary_html(
+    cn_title: str,
+    time_str: str,
+    src: str,
+    link: str,
+    summary: str,
+    bullets: list,
+) -> str:
+    esc = _html_escape
+    lis = "\n".join(f"<li>{esc(b)}</li>" for b in bullets) or "<li>（无）</li>"
+    return f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>{esc(cn_title)}</title>
+<style>
+body{{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}}
+h1{{font-size:1.25rem;margin:0 0 12px;line-height:1.4}}
+.meta{{font-size:.9rem;color:#555;margin:0 0 20px}}
+.meta a{{color:#06c;word-break:break-all}}
+h2{{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}}
+p{{margin:0 0 12px;white-space:pre-wrap}}
+ul{{margin:0;padding-left:1.2em}}
+li{{margin:6px 0}}
+.foot{{margin-top:28px;font-size:.8rem;color:#888}}
+</style>
+</head>
+<body>
+<h1>{esc(cn_title)}</h1>
+<p class="meta">时间：{esc(time_str)}<br/>来源：{esc(src)}<br/>原文：<a href="{esc(link)}">{esc(link)}</a></p>
+<h2>中文摘要</h2>
+<p>{esc(summary)}</p>
+<h2>要点</h2>
+<ul>
+{lis}
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>
+"""
+
+
 def _ensure_chinese_body_summary(item: dict, display_title: str) -> str:
     """
-    英文稿：抓正文→中文摘要+要点→写入 translated/，返回 GitHub blob URL；失败返回空串。
+    英文稿：抓正文→中文摘要+要点→写入 translated/*.html，返回可公开打开的 URL；失败返回空串。
     """
     if not _body_summary_enabled():
         return ""
@@ -1168,32 +1225,10 @@ def _ensure_chinese_body_summary(item: dict, display_title: str) -> str:
     time_str = item.get("published_str") or ""
     cn_title = (display_title or title).replace("（译）", "").strip() or title
 
-    bullet_lines = "\n".join(f"{i}. {b}" for i, b in enumerate(bullets, 1)) or "（无）"
-    md = "\n".join(
-        [
-            f"# {cn_title}",
-            "",
-            f"- **时间**：{time_str}",
-            f"- **来源**：{src}",
-            f"- **原文**：{link}",
-            "",
-            "## 中文摘要",
-            "",
-            summary,
-            "",
-            "## 要点",
-            "",
-            bullet_lines,
-            "",
-            "---",
-            "",
-            "_由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。_",
-            "",
-        ]
-    )
+    html = _render_summary_html(cn_title, time_str, src, link, summary, bullets)
     try:
         abs_path.parent.mkdir(parents=True, exist_ok=True)
-        abs_path.write_text(md, encoding="utf-8")
+        abs_path.write_text(html, encoding="utf-8")
         print(f"[摘要] 已写入 {rel}", flush=True)
     except OSError as e:
         print(f"[摘要] 写入失败: {e}", flush=True)
