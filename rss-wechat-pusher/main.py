@@ -7,6 +7,7 @@ RSS 推送到企业微信机器人
 - 去重：已写入 pushed 的链接不再推送
 - 全量：`--push-all-now`；临时含昨天：`--push-now --with-yesterday`
 """
+from __future__ import annotations
 
 import hashlib
 import json
@@ -1059,26 +1060,6 @@ def _body_summary_enabled() -> bool:
         )
 
 
-def _translate_view_base() -> str:
-    """摘要页公开访问前缀。默认走 jsDelivr（国内比 github.com 更易打开），不再用 blob 页。"""
-    try:
-        from config import TRANSLATE_VIEW_BASE_URL
-        if TRANSLATE_VIEW_BASE_URL:
-            return str(TRANSLATE_VIEW_BASE_URL).rstrip("/")
-    except ImportError:
-        pass
-    env_base = (os.getenv("TRANSLATE_VIEW_BASE_URL") or "").strip().rstrip("/")
-    if env_base:
-        return env_base
-    repo = (os.getenv("GITHUB_REPOSITORY") or "qinxiaoxia/eason727").strip()
-    ref = (os.getenv("GITHUB_REF_NAME") or "").strip()
-    if not ref:
-        full = (os.getenv("GITHUB_REF") or "main").strip()
-        ref = full[len("refs/heads/") :] if full.startswith("refs/heads/") else full or "main"
-    # jsDelivr：/gh/<owner>/<repo>@<ref>/<path>
-    return f"https://cdn.jsdelivr.net/gh/{repo}@{ref}"
-
-
 def _html_escape(s: str) -> str:
     return (
         (s or "")
@@ -1089,13 +1070,35 @@ def _html_escape(s: str) -> str:
     )
 
 
-def _summary_file_rel(link: str, published_str: str = "") -> str:
+def _summary_day_slug(link: str, published_str: str = ""):
     day = (published_str or "")[:10]
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", day):
         day = _now_beijing().strftime("%Y-%m-%d")
     slug = hashlib.sha1((link or "").encode("utf-8")).hexdigest()[:12]
-    # HTML：手机浏览器直接可读；jsDelivr 也能正确 Content-Type
+    return day, slug
+
+
+def _summary_file_rel(link: str, published_str: str = "") -> str:
+    day, slug = _summary_day_slug(link, published_str)
     return f"rss-wechat-pusher/translated/{day}/{slug}.html"
+
+
+def _summary_public_url(link: str, published_str: str, abs_path: Path | None = None) -> str:
+    """优先阿里云 OSS 公开 URL；未配置 OSS 则无法给领导打开。"""
+    from oss_utils import oss_enabled, oss_object_key, oss_public_url, upload_file
+
+    day, slug = _summary_day_slug(link, published_str)
+    key = oss_object_key(day, slug)
+    if not oss_enabled():
+        print("[摘要] 未配置 OSS，无法生成可打开外链（勿再用 GitHub/jsDelivr）", flush=True)
+        return ""
+    if abs_path is not None and abs_path.is_file():
+        try:
+            return upload_file(key, abs_path)
+        except Exception as e:
+            print(f"[摘要] OSS 上传失败，回退拼 URL: {e}", flush=True)
+            return oss_public_url(key)
+    return oss_public_url(key)
 
 
 _BODY_SUMMARY_SYSTEM = (
@@ -1179,7 +1182,7 @@ li{{margin:6px 0}}
 
 def _ensure_chinese_body_summary(item: dict, display_title: str) -> str:
     """
-    英文稿：抓正文→中文摘要+要点→写入 translated/*.html，返回可公开打开的 URL；失败返回空串。
+    英文稿：抓正文→中文摘要+要点→写本地并上传阿里云 OSS，返回 OSS 公开 URL；失败返回空串。
     """
     if not _body_summary_enabled():
         return ""
@@ -1190,12 +1193,15 @@ def _ensure_chinese_body_summary(item: dict, display_title: str) -> str:
     if not link:
         return ""
 
-    rel = _summary_file_rel(link, item.get("published_str") or "")
+    published_str = item.get("published_str") or ""
+    rel = _summary_file_rel(link, published_str)
     repo_root = Path(os.getenv("GITHUB_WORKSPACE") or Path(__file__).resolve().parent.parent)
     abs_path = repo_root / rel
 
     if abs_path.is_file() and abs_path.stat().st_size > 80:
-        return f"{_translate_view_base()}/{rel}"
+        url = _summary_public_url(link, published_str, abs_path)
+        if url:
+            return url
 
     body = _fetch_article_text(link)
     if len(body) < 80:
@@ -1222,7 +1228,7 @@ def _ensure_chinese_body_summary(item: dict, display_title: str) -> str:
     feed_url = item.get("source_url") or ""
     st = item.get("source_type") or _source_type_for_feed_url(feed_url)
     src = _source_bracket_label(item.get("author") or "", st, feed_url)
-    time_str = item.get("published_str") or ""
+    time_str = published_str
     cn_title = (display_title or title).replace("（译）", "").strip() or title
 
     html = _render_summary_html(cn_title, time_str, src, link, summary, bullets)
@@ -1233,7 +1239,20 @@ def _ensure_chinese_body_summary(item: dict, display_title: str) -> str:
     except OSError as e:
         print(f"[摘要] 写入失败: {e}", flush=True)
         return ""
-    return f"{_translate_view_base()}/{rel}"
+
+    from oss_utils import oss_enabled, oss_object_key, upload_html
+
+    if not oss_enabled():
+        print("[摘要] 未配置 OSS，跳过外链（请在 Secrets 配置 OSS_*）", flush=True)
+        return ""
+    day, slug = _summary_day_slug(link, published_str)
+    try:
+        url = upload_html(oss_object_key(day, slug), html)
+        print(f"[摘要] 已上传 OSS: {url}", flush=True)
+        return url
+    except Exception as e:
+        print(f"[摘要] OSS 上传失败: {e}", flush=True)
+        return ""
 
 
 def _build_single_category_content(category, items):
@@ -1270,7 +1289,7 @@ def _build_single_category_content(category, items):
             lines.append(f"> {pri_t}　{time_str}（{src}）")
         else:
             lines.append(f"> {time_str}（{src}）")
-        # 英文稿附中文摘要页（存 GitHub，便于领导免验证码阅读）
+        # 英文稿附中文摘要外链（阿里云 OSS，企微不塞长文）
         if TRANSLATE_ENABLED and full and _should_translate_title(full):
             summary_url = _ensure_chinese_body_summary(item, title)
             if summary_url:
@@ -1771,10 +1790,31 @@ def test_ioc():
         print("✓ 已推送（基础格式）")
 
 
+def test_oss():
+    """上传 ping.html 到 OSS，打印可打开的 URL（测国内连通）。"""
+    from oss_utils import oss_enabled, test_upload_ping
+
+    if not oss_enabled():
+        print(
+            "未配置 OSS。请设置环境变量或 config.py：\n"
+            "  OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET\n"
+            "  OSS_BUCKET / OSS_ENDPOINT\n"
+            "  可选 OSS_PUBLIC_BASE_URL（自定义域名或桶外网域名）"
+        )
+        return
+    try:
+        url = test_upload_ping()
+        print(f"✓ 已上传，请用手机/电脑打开:\n{url}")
+    except Exception as e:
+        print(f"✗ OSS 上传失败: {e}")
+
+
 if __name__ == "__main__":
     if "--test-llm" in sys.argv:
         test_llm()
     elif "--test-ioc" in sys.argv:
         test_ioc()
+    elif "--test-oss" in sys.argv:
+        test_oss()
     else:
         main()

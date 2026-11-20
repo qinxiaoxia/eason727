@@ -98,7 +98,7 @@ if not LLM_IOC_MODELS:
 # 勿使用「数学专用」等不适配 NLP 的模型名做翻译，易拒答或重复输出
 TRANSLATE_ENABLED = True
 
-# 英文正文：抓取后生成中文摘要+要点，存到仓库 translated/*.html，推送附公开链接
+# 英文正文：抓取后生成中文摘要 HTML → 上传阿里云 OSS，企微只附外链
 # 环境变量 TRANSLATE_BODY_ENABLED=0 关闭
 TRANSLATE_BODY_ENABLED = os.getenv("TRANSLATE_BODY_ENABLED", "1").strip().lower() not in (
     "0",
@@ -106,11 +106,19 @@ TRANSLATE_BODY_ENABLED = os.getenv("TRANSLATE_BODY_ENABLED", "1").strip().lower(
     "no",
     "off",
 )
-# 摘要页前缀：默认 jsDelivr（国内比 github.com 易开）；也可改成 OSS/自建域名
-TRANSLATE_VIEW_BASE_URL = (
-    os.getenv("TRANSLATE_VIEW_BASE_URL")
-    or "https://cdn.jsdelivr.net/gh/qinxiaoxia/eason727@main"
-)
+# 阿里云 OSS（GitHub Secrets 同名；桶需公共读或上传时对象 ACL public-read）
+OSS_ACCESS_KEY_ID = os.getenv("OSS_ACCESS_KEY_ID") or ""
+OSS_ACCESS_KEY_SECRET = os.getenv("OSS_ACCESS_KEY_SECRET") or ""
+OSS_BUCKET = os.getenv("OSS_BUCKET") or ""
+# 如 oss-cn-hangzhou.aliyuncs.com（不要带 https:// 也可）
+OSS_ENDPOINT = os.getenv("OSS_ENDPOINT") or ""
+# 对象前缀，默认 rss-summaries/
+OSS_PREFIX = os.getenv("OSS_PREFIX") or "rss-summaries/"
+# 公开访问前缀；留空则用 https://{bucket}.{endpoint}/
+# 例：https://your-bucket.oss-cn-hangzhou.aliyuncs.com 或绑定的自定义域名
+OSS_PUBLIC_BASE_URL = (os.getenv("OSS_PUBLIC_BASE_URL") or "").rstrip("/")
+# 兼容旧名：若设了 TRANSLATE_VIEW_BASE_URL 且未设 OSS_PUBLIC_BASE_URL，上传后也用它拼链接
+TRANSLATE_VIEW_BASE_URL = (os.getenv("TRANSLATE_VIEW_BASE_URL") or OSS_PUBLIC_BASE_URL or "").rstrip("/")
 
 # 公众号噪声：规则未命中时用分类模型复核是否属网安/AI 情报（见 classifier.exclusion_reason）
 # 环境变量 NOISE_LLM_REVIEW=0 关闭；=all 时对全部 RSS 源复核

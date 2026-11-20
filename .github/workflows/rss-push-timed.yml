@@ -42,6 +42,12 @@ jobs:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
           LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
+          OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT }}
+          OSS_PREFIX: ${{ secrets.OSS_PREFIX }}
+          OSS_PUBLIC_BASE_URL: ${{ secrets.OSS_PUBLIC_BASE_URL }}
           NOISE_LLM_REVIEW: "1"
           RSS_PUSH_MODE: scheduled
           # 与仅按时钟判断相比，显式标记「本轮为定时汇总」，延迟错过 slot 窗口时仍能走定时档逻辑

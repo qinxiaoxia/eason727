@@ -92,6 +92,24 @@ FreeBuf 会对部分**云主机出口 IP**返回 `405 Not Allowed`。脚本已�
 | `WEWE_RSS_URL` | 你的 WeWe RSS 地址，如 `https://eason727.zeabur.app` |
 | `FREEBUF_RSS_MIRROR` | 可选。FreeBuf 官方 feed 在 Actions 上 405 时，填镜像 RSS 全文 URL |
 
+### 英文摘要外链（阿里云 OSS，推荐）
+
+GitHub / jsDelivr 国内常打不开，摘要 HTML 上传到 OSS，企微只放链接。
+
+1. 控制台建桶（建议与通义同地域，如华东 1），读写权限选 **公共读**（或私有桶 + 上传时对象 ACL `public-read`，脚本已设置）。
+2. 建 RAM 用户，授权 `AliyunOSSFullAccess`（或仅该桶的读写），创建 AccessKey。
+3. 仓库 Secrets 增加：
+
+| 名称 | 示例 |
+|------|------|
+| `OSS_ACCESS_KEY_ID` | LTAI... |
+| `OSS_ACCESS_KEY_SECRET` | ... |
+| `OSS_BUCKET` | `your-rss-summaries` |
+| `OSS_ENDPOINT` | `oss-cn-hangzhou.aliyuncs.com` |
+| `OSS_PUBLIC_BASE_URL` | 可选，`https://your-rss-summaries.oss-cn-hangzhou.aliyuncs.com` |
+
+本地验证：`pip install -r requirements.txt && python main.py --test-oss`，用手机打开打印的 URL。
+
 ---
 
 ## 第三步：确认 workflow 已存在
