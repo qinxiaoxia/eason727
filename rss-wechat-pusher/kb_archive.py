@@ -81,20 +81,100 @@ def _strip_tags(s: str) -> str:
     return re.sub(r"<[^>]+>", " ", s or "")
 
 
+def _cat_file_slug(cat: str) -> str:
+    """分类页文件名（URL 安全）。"""
+    import hashlib
+    import urllib.parse
+
+    raw = (cat or "未分类").strip() or "未分类"
+    # 中文用 quote，避免 OSS/企微对路径编码不一致
+    q = urllib.parse.quote(raw, safe="")
+    if len(q) > 80:
+        q = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+    return q
+
+
+def _render_cards(items: List[Dict[str, Any]], limit: int = 500) -> str:
+    cards = []
+    for it in items[:limit]:
+        cat = it["c"] or "未分类"
+        cards.append(
+            f'<div class="card" data-cat="{_html_esc(cat)}">'
+            f'<h3><span class="cat">{_html_esc(cat)}</span>{_html_esc(it["t"])}</h3>'
+            f'<div class="meta">{_html_esc(it["d"])} · {_html_esc(it["a"])} · {_html_esc(it["p"])}</div>'
+            f'<p class="sum">{_html_esc(it["s"])}</p>'
+            f'<a class="link" href="{_html_esc(it["l"])}" target="_blank" rel="noopener">原文链接</a>'
+            f"</div>"
+        )
+    return "\n".join(cards) or '<div class="empty">暂无归档</div>'
+
+
+def _page_shell(
+    title: str,
+    sub: str,
+    nav_html: str,
+    body_html: str,
+    *,
+    filter_css: str = "",
+    filter_controls: str = "",
+) -> str:
+    return f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>{_html_esc(title)}</title>
+<style>
+body{{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+margin:0;padding:20px;background:#f6f7f9;color:#1a1a1a;max-width:920px;margin-inline:auto}}
+h1{{font-size:1.35rem;margin:0 0 8px}}
+.sub{{color:#666;font-size:.9rem;margin-bottom:12px;line-height:1.5}}
+.nav{{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}}
+.nav a,.nav label{{display:inline-block;padding:8px 12px;border-radius:6px;background:#fff;
+border:1px solid #ddd;color:#1a1a1a;text-decoration:none;font-size:.92rem}}
+.nav a.on,.nav label.on{{background:#1a6fb5;color:#fff;border-color:#1a6fb5}}
+/* 纯 CSS 分类筛选：radio + 兄弟选择器，不依赖 JS（适配企微） */
+input[name=f]{{position:absolute;opacity:0;width:0;height:0}}
+.filters{{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}}
+.filters label{{display:inline-block;padding:8px 12px;border-radius:6px;background:#fff;
+border:1px solid #ddd;font-size:.92rem;cursor:pointer;-webkit-tap-highlight-color:transparent}}
+{filter_css}
+.card{{background:#fff;border:1px solid #e5e5e5;border-radius:8px;padding:12px 14px;margin:0 0 10px}}
+.card h3{{font-size:1rem;margin:0 0 6px;line-height:1.4}}
+.meta{{font-size:.8rem;color:#666}}
+.sum{{font-size:.9rem;margin:8px 0 6px;white-space:pre-wrap;color:#333}}
+.cat{{display:inline-block;background:#eef5fb;color:#1a6fb5;padding:1px 6px;border-radius:4px;margin-right:6px}}
+a.link{{color:#06c;word-break:break-all}}
+.empty{{color:#888;padding:24px 0}}
+.tip{{font-size:.85rem;color:#888;margin:0 0 14px;line-height:1.45}}
+.searchbox{{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px;align-items:center}}
+.searchbox input{{flex:1;min-width:160px;font:inherit;padding:8px 10px;border:1px solid #ccc;border-radius:6px}}
+.searchbox button{{font:inherit;padding:8px 12px;border:1px solid #1a6fb5;background:#1a6fb5;color:#fff;border-radius:6px}}
+</style>
+</head>
+<body>
+<h1>{_html_esc(title)}</h1>
+<p class="sub">{sub}</p>
+{nav_html}
+{filter_controls}
+{body_html}
+</body>
+</html>
+"""
+
+
 def _build_search_html(catalog: List[Dict[str, Any]]) -> str:
     """
-    服务端直接渲染条目列表（不依赖 JS）。
-    阿里云默认域名对 HTML 强制 attachment，企微里脚本经常不执行，
-    原先「正在准备…」+ 客户端渲染会一直卡住。
+    主检索页：列表服务端渲染；分类用「链接跳转分类页」+「纯 CSS radio 筛选」，
+    不依赖企微执行 JS。关键词用浏览器原生查找（并提供可选 JS 增强）。
     """
-    # 轻量目录：去 HTML 标签，缩短摘要，供可选增强脚本使用
     light: List[Dict[str, Any]] = []
     for it in catalog:
         light.append(
             {
                 "t": (it.get("title") or "")[:200],
                 "s": _strip_tags(it.get("summary") or "")[:160],
-                "c": it.get("category") or "",
+                "c": (it.get("category") or "").strip() or "未分类",
                 "a": (it.get("author") or "")[:40],
                 "l": it.get("link") or "",
                 "d": it.get("day") or "",
@@ -102,99 +182,97 @@ def _build_search_html(catalog: List[Dict[str, Any]]) -> str:
             }
         )
 
-    cats = sorted({x["c"] for x in light if x["c"]})
-    cat_opts = "".join(f'<option value="{_html_esc(c)}">{_html_esc(c)}</option>' for c in cats)
-
-    cards = []
-    for it in light[:500]:
-        blob = _html_esc(f"{it['t']} {it['s']} {it['c']} {it['a']}".lower())
-        cards.append(
-            f'<div class="card" data-blob="{blob}">'
-            f'<h3><span class="cat">{_html_esc(it["c"] or "未分类")}</span>{_html_esc(it["t"])}</h3>'
-            f'<div class="meta">{_html_esc(it["d"])} · {_html_esc(it["a"])} · {_html_esc(it["p"])}</div>'
-            f'<p class="sum">{_html_esc(it["s"])}</p>'
-            f'<a href="{_html_esc(it["l"])}" target="_blank" rel="noopener">原文链接</a>'
-            f"</div>"
+    cats = sorted({x["c"] for x in light})
+    # 纯 CSS radio：点分类即隐藏其它卡片（企微无 JS 也能用）
+    radio_inputs = ['<input type="radio" name="f" id="f-all" checked>']
+    labels = ['<label for="f-all">全部</label>']
+    css_parts = [
+        "#f-all:checked ~ .filters label[for=f-all]{background:#1a6fb5;color:#fff;border-color:#1a6fb5}"
+    ]
+    for i, c in enumerate(cats):
+        fid = f"f-{i}"
+        radio_inputs.append(f'<input type="radio" name="f" id="{fid}">')
+        labels.append(f'<label for="{fid}">{_html_esc(c)}</label>')
+        css_parts.append(
+            f"#{fid}:checked ~ .filters label[for={fid}]{{background:#1a6fb5;color:#fff;border-color:#1a6fb5}}"
         )
-    cards_html = "\n".join(cards) or '<div class="empty">暂无归档</div>'
+        css_parts.append(
+            f'#{fid}:checked ~ #list .card:not([data-cat="{_html_esc(c)}"]){{display:none!important}}'
+        )
+    filter_css = "\n".join(css_parts)
 
-    # 可选增强：过滤已渲染卡片（失败也不影响阅读）
-    enhance = """
-<script>
-(function(){
-  try{
-    var qEl=document.getElementById('q');
-    var catEl=document.getElementById('cat');
-    var stats=document.getElementById('stats');
-    var cards=[].slice.call(document.querySelectorAll('.card[data-blob]'));
-    function run(){
-      var q=(qEl&&qEl.value||'').trim().toLowerCase().split(/\\s+/).filter(Boolean);
-      var cat=catEl&&catEl.value||'';
-      var n=0;
-      cards.forEach(function(el){
-        var blob=(el.getAttribute('data-blob')||'');
-        var ok=(!cat||blob.indexOf(cat.toLowerCase())>=0);
-        if(ok&&q.length){ok=q.every(function(p){return blob.indexOf(p)>=0;});}
-        el.style.display=ok?'':'none';
-        if(ok)n++;
-      });
-      if(stats)stats.textContent='共 '+cards.length+' 条，当前显示 '+n+' 条';
-    }
-    if(document.getElementById('go'))document.getElementById('go').onclick=run;
-    if(qEl)qEl.addEventListener('keydown',function(e){if(e.key==='Enter')run();});
-    if(catEl)catEl.onchange=run;
-    run();
-  }catch(e){}
-})();
-</script>
-"""
-    return f"""<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>网安情报知识库</title>
-<style>
-body{{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
-margin:0;padding:20px;background:#f6f7f9;color:#1a1a1a;max-width:920px;margin-inline:auto}}
-h1{{font-size:1.35rem;margin:0 0 8px}}
-.sub{{color:#666;font-size:.9rem;margin-bottom:16px}}
-input,select,button{{font:inherit;padding:8px 10px;border:1px solid #ccc;border-radius:6px}}
-input{{width:min(420px,100%);box-sizing:border-box}}
-.row{{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;align-items:center}}
-#stats{{color:#555;font-size:.85rem;margin-bottom:10px}}
-.card{{background:#fff;border:1px solid #e5e5e5;border-radius:8px;padding:12px 14px;margin:0 0 10px}}
-.card h3{{font-size:1rem;margin:0 0 6px;line-height:1.4}}
-.meta{{font-size:.8rem;color:#666}}
-.sum{{font-size:.9rem;margin:8px 0 6px;white-space:pre-wrap;color:#333}}
-.cat{{display:inline-block;background:#eef5fb;color:#1a6fb5;padding:1px 6px;border-radius:4px;margin-right:6px}}
-a{{color:#06c;word-break:break-all}}
-.empty{{color:#888;padding:24px 0}}
-</style>
-</head>
-<body>
-<h1>网安情报知识库</h1>
-<p class="sub">已归档 {len(light)} 条。下方列表可直接浏览；若搜索框可用，可按关键词过滤。</p>
-<div class="row">
-  <input id="q" type="search" placeholder="关键词，如：银行 勒索 CVE"/>
-  <select id="cat"><option value="">全部分类</option>{cat_opts}</select>
-  <button id="go" type="button">筛选</button>
-</div>
-<div id="stats">共 {len(light)} 条（先显示前 {min(500, len(light))} 条）</div>
-<div id="list">
-{cards_html}
-</div>
-{enhance}
-</body>
-</html>
-"""
+    # 顶栏：整页跳转分类专页（比 radio 更稳）
+    nav_links = ['<a class="on" href="search.html">全部</a>']
+    for c in cats:
+        nav_links.append(f'<a href="c/{_cat_file_slug(c)}.html">{_html_esc(c)}</a>')
+    nav_html = '<div class="nav">' + "".join(nav_links) + "</div>"
+
+    filter_controls = (
+        "".join(radio_inputs)
+        + '<div class="filters">'
+        + "".join(labels)
+        + "</div>"
+        + '<p class="tip">推荐：点上方蓝色链接进入「分类专页」。'
+        + "本页下方标签也可即时筛选。"
+        + "搜关键词：用系统「在网页中查找」。</p>"
+    )
+
+    body = f'<div id="list">\n{_render_cards(light, 500)}\n</div>'
+    return _page_shell(
+        "网安情报知识库",
+        f"已归档 {len(light)} 条。分类请点链接或标签（不依赖脚本）。",
+        nav_html,
+        body,
+        filter_css=filter_css,
+        filter_controls=filter_controls,
+    )
+
+
+def _build_category_html(cat: str, items: List[Dict[str, Any]], all_cats: List[str]) -> str:
+    nav_links = ['<a href="../search.html">全部</a>']
+    for c in all_cats:
+        slug = _cat_file_slug(c)
+        cls = ' class="on"' if c == cat else ""
+        nav_links.append(f'<a{cls} href="{slug}.html">{_html_esc(c)}</a>')
+    nav_html = '<div class="nav">' + "".join(nav_links) + "</div>"
+    body = f'<p class="tip">当前分类：{_html_esc(cat)}（{len(items)} 条）</p><div id="list">{_render_cards(items, 800)}</div>'
+    return _page_shell(
+        f"{cat} · 网安情报知识库",
+        f"分类专页，共 {len(items)} 条。点「全部」返回。",
+        nav_html,
+        body,
+    )
 
 
 def ensure_search_page(catalog: Optional[List[Dict[str, Any]]] = None) -> Optional[str]:
     if not oss_enabled():
         return None
-    key = f"{kb_prefix()}search.html"
-    return upload_html(key, _build_search_html(catalog or []))
+    catalog = catalog or []
+    light: List[Dict[str, Any]] = []
+    for it in catalog:
+        light.append(
+            {
+                "t": (it.get("title") or "")[:200],
+                "s": _strip_tags(it.get("summary") or "")[:160],
+                "c": (it.get("category") or "").strip() or "未分类",
+                "a": (it.get("author") or "")[:40],
+                "l": it.get("link") or "",
+                "d": it.get("day") or "",
+                "p": (it.get("published_str") or "")[:16],
+            }
+        )
+    prefix = kb_prefix()
+    # 主页
+    url = upload_html(f"{prefix}search.html", _build_search_html(catalog))
+    # 分类专页（点分类即整页跳转，最稳）
+    by_cat: Dict[str, List[Dict[str, Any]]] = {}
+    for it in light:
+        by_cat.setdefault(it["c"], []).append(it)
+    cats = sorted(by_cat.keys())
+    for c, rows in by_cat.items():
+        slug = _cat_file_slug(c)
+        upload_html(f"{prefix}c/{slug}.html", _build_category_html(c, rows, cats))
+    return url
 
 
 def sync_knowledge_base(conn: sqlite3.Connection) -> Dict[str, Any]:
