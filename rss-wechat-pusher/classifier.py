@@ -131,6 +131,19 @@ _EXCLUDE_OFF_TOPIC = re.compile(
     r"党旗在基层|高高飘扬|冲锋在前|全力救援)"
 )
 
+# 赛事语境 + 校园/大学生 → 直接剔除（领导不看高校赛）
+# 注意：中文夹英文时 \b 不可靠，CTF/HVV 不用 word boundary
+_COMPETITION_CONTEXT = re.compile(
+    r"(?i)(ctf|攻防演练|护网|实网攻防|awd|红蓝对抗|安全竞赛|解题赛|赛题|"
+    r"write[\s-]?up|技能大赛|极客挑战|强网杯|hvv|hackathon|competition|contest|"
+    r"挑战赛|选拔赛|网络安全赛|信息安全赛|夺旗|解题|校赛)"
+)
+_CAMPUS_CONTEXT = re.compile(
+    r"(大学|高校|学院|校园|校赛|校内|大学生|研究生|本科生|高职|中小学|职校|"
+    r"学校|师生|在校生|学生团队|学生队伍|研究生院|"
+    r"university|college|campus|student)"
+)
+
 _EXCLUSION_RULES = (
     ("招标采购", _EXCLUDE_PROCUREMENT),
     ("赛事结果/表彰", _EXCLUDE_COMPETITION_RESULT),
@@ -138,6 +151,83 @@ _EXCLUSION_RULES = (
     ("时政/节日", _EXCLUDE_GENERAL_NEWS),
     ("离题/宣传", _EXCLUDE_OFF_TOPIC),
 )
+
+
+def is_campus_competition(title: str, summary: str = "") -> bool:
+    """网安赛事且涉及大学/学校/大学生 → 应屏蔽。"""
+    blob = f"{title or ''}\n{summary or ''}"[:2000]
+    return bool(_COMPETITION_CONTEXT.search(blob) and _CAMPUS_CONTEXT.search(blob))
+
+
+# ---------- 重大安全事件：仅「超大影响」或「金融/类金融」 ----------
+_FINANCIAL_ENTITY = re.compile(
+    r"(?i)("
+    r"银行|城商行|信用社|农商行|证券|券商|期货|基金|保险|信托|银保监|证监|央行|人民银行|"
+    r"支付宝|微信支付|银联|网联|支付机构|第三方支付|清算|交易所|上交所|深交所|港交所|"
+    r"彩票|福利彩票|体育彩票|消费金融|小额贷款|小贷|融资担保|类金融|互联网金融|"
+    r"信用卡|网银|理财|投行|支付牌照|数字人民币|金融科技|"
+    r"\bbank\b|securities|broker(?:age)?|insurer?|insurance|lottery|fintech|"
+    r"stock\s+exchange|nasdaq|nyse|payment\s+(?:processor|provider)|swift\b"
+    r")"
+)
+_CYBER_HARM = re.compile(
+    r"(?i)(遭攻击|被入侵|入侵|勒索|瘫痪|泄露|外泄|脱库|被盗|攻陷|停摆|中断|"
+    r"breach|ransomware|hacked|compromised|data\s+leak|cyber\s+attack|ddos)"
+)
+_MEGA_SCALE = re.compile(
+    r"(?i)("
+    r"跨国|跨境|多国|全球性|全球范围|国际影响|worldwide|cross[\s-]?border|multi[\s-]?countr|"
+    r"(?:超级|特大|史无前例).{0,16}(影响|瘫痪|中断|泄露|损失)|"
+    r"(?:大规模|大面积).{0,12}(瘫痪|中断|停摆|泄露)|"
+    r"(?:数)?千万|(?:上)?亿(?:级|元|人|用户|条)|亿级|"
+    r"损失.{0,12}(?:数)?[亿万]|[亿]元.{0,8}(损失|赎金|赔付)|"
+    r"(?:数百?万|千万).{0,20}(用户|记录|条|人|账户)|"
+    r"critical\s+infrastructure|"
+    r"nationwide|global\s+(?:outage|breach|attack)"
+    r")"
+)
+
+
+def is_financial_cyber_incident(title: str, summary: str = "") -> bool:
+    """金融 / 类金融主体 + 网络安全实害。"""
+    blob = f"{title or ''}\n{summary or ''}"[:2400]
+    return bool(_FINANCIAL_ENTITY.search(blob) and _CYBER_HARM.search(blob))
+
+
+def is_mega_scale_incident(title: str, summary: str = "") -> bool:
+    """超大规模影响、重大经济损失、跨国等。"""
+    blob = f"{title or ''}\n{summary or ''}"[:2400]
+    if not _MEGA_SCALE.search(blob):
+        return False
+    # 仍需像事件：有实害或确认口径，避免「跨国合作倡议」类误伤
+    if _CYBER_HARM.search(blob) or re.search(
+        r"(已确认|官方确认|证实|遭|被黑|停服| ransom)", blob, re.I
+    ):
+        return True
+    return bool(_MEGA_SCALE.search(blob) and re.search(r"(攻击|泄露|勒索|入侵|瘫痪)", blob))
+
+
+def qualifies_as_major_incident(title: str, summary: str = "") -> bool:
+    """
+    业务口径：重大安全事件只保留两类——
+    ① 超级大规模 / 很大经济损失 / 跨国等；
+    ② 金融与类金融领域网安事件（最重要）。
+    其余即使「出事」也降为网安新闻资讯。
+    """
+    if is_financial_cyber_incident(title, summary):
+        return True
+    if is_mega_scale_incident(title, summary):
+        return True
+    return False
+
+
+def demote_non_qualifying_major(cat: str, title: str, summary: str = "") -> Tuple[str, Optional[str]]:
+    """若被标成重大但不达口径 → 降为网安新闻；返回 (类别, 优先级或 None)。"""
+    if cat != "重大安全事件":
+        return cat, None
+    if qualifies_as_major_incident(title, summary):
+        return cat, major_incident_priority(title, summary)
+    return "网安新闻资讯", None
 
 _LLM_NOISE_REVIEW_SYSTEM = """你是网络安全与 AI 资讯频道的稿件筛选编辑。频道只推送与「网络安全 / 信息安全 / 人工智能（技术及产业）」相关、且对值班人员有信息价值的稿件。
 
@@ -228,6 +318,8 @@ def exclusion_reason(
     for label, pattern in _EXCLUSION_RULES:
         if pattern.search(blob):
             return label
+    if is_campus_competition(title, summary):
+        return "校园赛事"
     do_llm = _noise_llm_review_enabled(st) if llm_review is None else llm_review
     if do_llm:
         return _llm_exclusion_reason(author, title, summary)
@@ -634,7 +726,10 @@ _CLASSIFICATION_CRITERIA = """
 
 【八类定义摘要】
 1. 【监管机构预警 | Security Advisory】（你不用输出）：国家网络安全通报中心 + 标题为「重点防范」开头、「国家通报」开头、或通报类恶意网址/恶意IP/境外恶意等；CNCERT +「关于」开头且含「风险提示」。
-2. 【重大安全事件 | Security Incident】（门槛高）：**已发生且已确认**的实害 + **可验证的实质影响**（泄露、入侵、中断、勒索得逞等）；排除未遂/演练/仅预警/传闻/纯理论。
+2. 【重大安全事件 | Security Incident】（门槛极高，宁缺毋滥）：仅当满足下列**之一**才可标为本类：
+   - **超大影响**：跨国/跨境/全球性，或极大经济损失（亿级/数千万用户级），或大面积关键基础设施瘫痪等；
+   - **金融与类金融**：银行、证券、保险、基金、期货、支付、清算、彩票、交易所、消费金融/小贷等主体的网安实害（最重要）。
+   医院/高校/普通企业/一般市政等虽有实害，**一律不要**标重大，改归「网安新闻资讯」。排除未遂/演练/仅预警/传闻。
 3. 【AI与信息安全技术 | AI & InfoSec】：**仅当**不能优先归入「漏洞信息」或「网安赛事资讯」时选用。须为 **AI 技术与网络安全/信息安全的直接交集**（二者缺一不归本类）。典型：
    - 利用 AI 发起的新型攻击（LLM 写勒索软件、Deepfake/语音克隆诈骗等）。
    - AI 系统被攻击或风险叙事（提示词注入、越狱、数据投毒、对抗样本、模型窃取等）**且非**以 CVE/CVSS/补丁通告为主体。
@@ -643,6 +738,7 @@ _CLASSIFICATION_CRITERIA = """
    **排除**：仅传统漏洞且无 AI；纯 AI 娱乐无安全风险叙述。
 4. 【漏洞信息 | Vulnerability】：**凡**以 CVE/CVSS/补丁/受影响版本/厂商安全通告**技术细节为主**的稿件（**包括**大模型、Agent、RAG、插件供应链等相关漏洞），**一律**归本类，**不归** AI与信息安全技术。已证实大规模实害且非单纯通告 → 重大安全事件。
 5. 【网安赛事资讯 | CTF/Competition】：**凡**以 CTF、护网、HVV、竞赛、Hackathon、解题赛、赛题、writeup、作**赛事/演练活动报道**的红蓝对抗为主线的，**一律**归本类（**含**「AI 安全」主题的赛），**不归** AI与信息安全技术。
+   **硬排除**：涉及大学/高校/学院/校园/大学生/校赛等校园主体的赛事稿——系统会另行剔除，你仍可标赛事类，但勿标成新闻凑数。
 6. 【AI行业资讯 | AI Industry News】：**仅当**不能归入漏洞信息、网安赛事、重大安全事件时选用。须同时满足：
    - **至少一个一级触发词**（技术与产品：发布/上线/开源/公测/商用/突破/SOTA/超越/替代/暂停/下线/封禁及英译 Launch/Release/Open-source/GA/Breakthrough/Benchmark/SOTA/Deprecate/Ban 等；政策与宏观：监管/立法/合规/禁令/指南/白宫/国会/网信办/发改委/欧盟/行政令及 Regulation/Legislation/Compliance/Executive Order/FTC 等）。
    - **来源为权威媒体或主流科技/财经媒体**（作者、署名、转载来源；如新华社、澎湃、财新、36氪、机器之心、量子位、TechCrunch、Reuters、Bloomberg、The Verge、MIT Technology Review 等）。
@@ -704,7 +800,7 @@ def classify_by_keywords(author: str, title: str, summary: str) -> Optional[str]
         if _major_incident_blob_heuristic(blob, low):
             return "重大安全事件"
 
-    # 2) 网安赛事资讯（优先于 AI∩安全、AI 行业）
+    # 2) 网安赛事资讯（优先于 AI∩安全、AI 行业；校园赛由 exclusion 剔除）
     if re.search(
         r"(\bctf\b|ctf[杯赛战]|攻防演练|护网20\d{2}|护网行动|实网攻防|awd赛|红队演练|红蓝对抗"
         r"|安全竞赛|解题赛|赛题|writeup|题解|\bwp\b|技能大赛|极客挑战|强网杯|\bhvv\b"
@@ -712,6 +808,8 @@ def classify_by_keywords(author: str, title: str, summary: str) -> Optional[str]
         blob,
         re.I,
     ):
+        if is_campus_competition(title, summary):
+            return None  # 交由 exclusion_reason 标「校园赛事」剔除；避免入库成赛事
         return "网安赛事资讯"
 
     # 3) CVE/CNNVD → 漏洞信息或重大（不落入 AI∩安全，与 LLM 规则一致）
@@ -925,11 +1023,35 @@ def _call_llm_classify(text: str) -> Optional[Tuple[str, Optional[str]]]:
     return cat, pri
 
 
+def _finalize_category(
+    cat: str, title: str, summary: str, pri: Optional[str] = None
+) -> Tuple[str, Optional[str]]:
+    """校园赛事降噪 + 重大事件口径收紧。"""
+    if cat == "网安赛事资讯" and is_campus_competition(title, summary):
+        # 仍返回赛事名便于日志；入库前 exclusion 会剔除。也可直接标其他资讯。
+        return cat, None
+    if cat == "重大安全事件":
+        cat2, _ = demote_non_qualifying_major(cat, title, summary)
+        if cat2 != "重大安全事件":
+            print(f"[分类] 重大事件未达口径，降为网安新闻: {(title or '')[:40]}", flush=True)
+            return cat2, None
+        if not pri:
+            pri = major_incident_priority(title, summary)
+        # 金融类默认至少中优先级，便于推送辨识
+        if is_financial_cyber_incident(title, summary) and pri == "low":
+            pri = "medium"
+        if is_mega_scale_incident(title, summary):
+            pri = "high"
+        return cat, pri
+    return cat, None
+
+
 def classify(author: str, title: str, summary: str, source_type: str) -> Tuple[str, Optional[str]]:
     """
     分类入口。返回 (类别, 事件优先级)。
     - 监管机构预警：仅规则命中。
     - 其余类：**优先 LLM**；未配置 LLM 或调用失败时，才用关键词 classify_by_keywords 兜底。
+    - 重大安全事件：仅金融/类金融或超大影响；否则降为网安新闻资讯。
     - incident_priority 仅「重大安全事件」为 high / medium / low；其余为 None。
     """
     cat = classify_by_rules(author, title, source_type)
@@ -949,16 +1071,12 @@ def classify(author: str, title: str, summary: str, source_type: str) -> Tuple[s
             rule_cat = classify_by_rules(author, title, source_type)
             if rule_cat:
                 return rule_cat, None
-            if cat == "重大安全事件" and not pri:
-                pri = major_incident_priority(title, summary)
-            return cat, pri
+            return _finalize_category(cat, title, summary, pri)
 
     cat = classify_by_keywords(author, title, summary)
     if cat:
+        pri = None
         if cat == "重大安全事件":
             pri = _call_llm_incident_priority_only(text) if get_llm_providers() else None
-            if not pri:
-                pri = major_incident_priority(title, summary)
-            return cat, pri
-        return cat, None
+        return _finalize_category(cat, title, summary, pri)
     return "其他资讯", None

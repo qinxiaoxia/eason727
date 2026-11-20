@@ -172,6 +172,12 @@ def _exclude_noise_items(conn, items):
             continue
         st = item.get("source_type") or _source_type_for_feed_url(item.get("source_url") or "")
         reason = exclusion_reason(author, title, summary, st)
+        # 已分类为赛事但仍含校园主体 → 再拦一道
+        if not reason and (item.get("category") or "") == "网安赛事资讯":
+            from classifier import is_campus_competition
+
+            if is_campus_competition(title, summary):
+                reason = "校园赛事"
         if reason:
             batch.append((link, title, reason, author, item.get("source_url") or "", item.get("published_str") or "", now))
         else:
@@ -185,6 +191,52 @@ def _exclude_noise_items(conn, items):
         )
         conn.commit()
         print(f"推送前剔除噪声 {len(batch)} 条", flush=True)
+    return kept
+
+
+def _recent_pushed_titles(conn, days: int = 14):
+    """已推送文章的 (title, link)，用于跨源去重。"""
+    try:
+        cur = conn.execute(
+            """SELECT a.title, a.link FROM articles a
+               INNER JOIN pushed p ON a.link = p.link
+               WHERE a.title IS NOT NULL AND a.title != ''
+               ORDER BY p.pushed_at DESC
+               LIMIT 800"""
+        )
+        return [(r[0], r[1]) for r in cur.fetchall()]
+    except Exception:
+        return []
+
+
+def _dedupe_cross_source(conn, items):
+    """
+    跨网站同一事件只推一条：与近两周已推标题 + 本批次互比。
+    重复项写入 pushed(dedup_skip)，避免定时档反复捞起。
+    """
+    if not items:
+        return []
+    from story_dedup import dedupe_items_keep_first
+
+    prior = _recent_pushed_titles(conn)
+    kept, dropped = dedupe_items_keep_first(items, prior_titles=prior)
+    if dropped:
+        now = datetime.now().isoformat()
+        for d in dropped:
+            link = d.get("link") or ""
+            if not link:
+                continue
+            conn.execute(
+                "INSERT OR IGNORE INTO pushed (link, pushed_at, push_type) VALUES (?, ?, ?)",
+                (link, now, "dedup_skip"),
+            )
+            print(
+                f"[去重] 跨源重复，跳过: {(d.get('title') or '')[:36]} "
+                f"≈ {(d.get('dedup_of_title') or '')[:36]}",
+                flush=True,
+            )
+        conn.commit()
+        print(f"跨源去重跳过 {len(dropped)} 条，保留 {len(kept)} 条", flush=True)
     return kept
 
 
@@ -1613,6 +1665,7 @@ def main():
         ]
         if realtime_items:
             realtime_items = _exclude_noise_items(conn, realtime_items)
+            realtime_items = _dedupe_cross_source(conn, realtime_items)
         if realtime_items:
             by_cat = {}
             for item in realtime_items:
@@ -1687,6 +1740,7 @@ def main():
                     "summary": summary or "",
                 })
             row_items = _exclude_noise_items(conn, row_items)
+            row_items = _dedupe_cross_source(conn, row_items)
             if row_items:
                 by_cat = {}
                 for item in row_items:
