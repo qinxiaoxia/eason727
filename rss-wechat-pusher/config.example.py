@@ -98,6 +98,20 @@ if not LLM_IOC_MODELS:
 # 勿使用「数学专用」等不适配 NLP 的模型名做翻译，易拒答或重复输出
 TRANSLATE_ENABLED = True
 
+# 英文正文：抓取后生成中文摘要+要点，存到仓库 translated/，推送里附 GitHub 链接（方便领导免验证码阅读）
+# 环境变量 TRANSLATE_BODY_ENABLED=0 关闭
+TRANSLATE_BODY_ENABLED = os.getenv("TRANSLATE_BODY_ENABLED", "1").strip().lower() not in (
+    "0",
+    "false",
+    "no",
+    "off",
+)
+# 摘要页浏览前缀（Actions 会优先用 GITHUB_REPOSITORY）；默认指向本仓库 main
+TRANSLATE_VIEW_BASE_URL = (
+    os.getenv("TRANSLATE_VIEW_BASE_URL")
+    or "https://github.com/qinxiaoxia/eason727/blob/main"
+)
+
 # 公众号噪声：规则未命中时用分类模型复核是否属网安/AI 情报（见 classifier.exclusion_reason）
 # 环境变量 NOISE_LLM_REVIEW=0 关闭；=all 时对全部 RSS 源复核
 NOISE_LLM_REVIEW = os.getenv("NOISE_LLM_REVIEW", "").strip().lower() not in ("0", "false", "no", "off")

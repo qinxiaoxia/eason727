@@ -8,6 +8,7 @@ RSS 推送到企业微信机器人
 - 全量：`--push-all-now`；临时含昨天：`--push-now --with-yesterday`
 """
 
+import hashlib
 import json
 import os
 import re
@@ -1045,6 +1046,161 @@ def _translate_to_chinese(title):
     return pair
 
 
+def _body_summary_enabled() -> bool:
+    try:
+        from config import TRANSLATE_BODY_ENABLED
+        return bool(TRANSLATE_BODY_ENABLED)
+    except ImportError:
+        return os.getenv("TRANSLATE_BODY_ENABLED", "1").strip().lower() not in (
+            "0",
+            "false",
+            "no",
+            "off",
+        )
+
+
+def _translate_view_base() -> str:
+    """摘要 Markdown 在 GitHub 上的 blob 前缀。"""
+    repo = (os.getenv("GITHUB_REPOSITORY") or "").strip()
+    if repo:
+        ref = (os.getenv("GITHUB_REF_NAME") or "").strip()
+        if not ref:
+            full = (os.getenv("GITHUB_REF") or "main").strip()
+            ref = full[len("refs/heads/") :] if full.startswith("refs/heads/") else full or "main"
+        return f"https://github.com/{repo}/blob/{ref}"
+    try:
+        from config import TRANSLATE_VIEW_BASE_URL
+        if TRANSLATE_VIEW_BASE_URL:
+            return str(TRANSLATE_VIEW_BASE_URL).rstrip("/")
+    except ImportError:
+        pass
+    return "https://github.com/qinxiaoxia/eason727/blob/main"
+
+
+def _summary_file_rel(link: str, published_str: str = "") -> str:
+    day = (published_str or "")[:10]
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", day):
+        day = _now_beijing().strftime("%Y-%m-%d")
+    slug = hashlib.sha1((link or "").encode("utf-8")).hexdigest()[:12]
+    return f"rss-wechat-pusher/translated/{day}/{slug}.md"
+
+
+_BODY_SUMMARY_SYSTEM = (
+    "你是网络安全行业中文编辑。用户给出英文资讯正文（可能不完整）。"
+    "请提炼领导可快速阅读的中文内容，只输出 JSON 对象，不要 markdown 代码围栏："
+    '{"summary":"约300到500字中文摘要","bullets":["要点1","要点2","要点3"]}'
+    "bullets 3到5条；不要编造正文没有的事实；专有名词可保留英文。"
+)
+
+
+def _parse_body_summary_json(raw: str):
+    if not raw:
+        return None
+    text = raw.strip()
+    fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+    if fence:
+        text = fence.group(1)
+    else:
+        m = re.search(r"(\{.*\})", text, re.DOTALL)
+        if m:
+            text = m.group(1)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    summary = (data.get("summary") or "").strip()
+    bullets = data.get("bullets") or []
+    if not isinstance(bullets, list):
+        bullets = []
+    bullets = [str(x).strip() for x in bullets if str(x).strip()][:5]
+    if not summary or not _has_chinese(summary) or _looks_like_llm_refusal(summary):
+        return None
+    return summary, bullets
+
+
+def _ensure_chinese_body_summary(item: dict, display_title: str) -> str:
+    """
+    英文稿：抓正文→中文摘要+要点→写入 translated/，返回 GitHub blob URL；失败返回空串。
+    """
+    if not _body_summary_enabled():
+        return ""
+    title = (item.get("title") or "").strip()
+    if not title or not _should_translate_title(title):
+        return ""
+    link = (item.get("link") or "").strip()
+    if not link:
+        return ""
+
+    rel = _summary_file_rel(link, item.get("published_str") or "")
+    repo_root = Path(os.getenv("GITHUB_WORKSPACE") or Path(__file__).resolve().parent.parent)
+    abs_path = repo_root / rel
+
+    if abs_path.is_file() and abs_path.stat().st_size > 80:
+        return f"{_translate_view_base()}/{rel}"
+
+    body = _fetch_article_text(link)
+    if len(body) < 80:
+        body = (item.get("summary") or "").strip()
+    if len(body) < 40:
+        print(f"[摘要] 正文过短，跳过: {title[:40]}", flush=True)
+        return ""
+
+    from llm_utils import call_llm_with_fallback, get_llm_providers
+
+    if not get_llm_providers():
+        return ""
+    user = f"标题：{title}\n\n正文：\n{body[:8000]}"
+    raw = call_llm_with_fallback(
+        [{"role": "user", "content": user}],
+        max_tokens=900,
+        system=_BODY_SUMMARY_SYSTEM,
+    )
+    parsed = _parse_body_summary_json(raw or "")
+    if not parsed:
+        print(f"[摘要] LLM 解析失败: {title[:40]}", flush=True)
+        return ""
+    summary, bullets = parsed
+    feed_url = item.get("source_url") or ""
+    st = item.get("source_type") or _source_type_for_feed_url(feed_url)
+    src = _source_bracket_label(item.get("author") or "", st, feed_url)
+    time_str = item.get("published_str") or ""
+    cn_title = (display_title or title).replace("（译）", "").strip() or title
+
+    bullet_lines = "\n".join(f"{i}. {b}" for i, b in enumerate(bullets, 1)) or "（无）"
+    md = "\n".join(
+        [
+            f"# {cn_title}",
+            "",
+            f"- **时间**：{time_str}",
+            f"- **来源**：{src}",
+            f"- **原文**：{link}",
+            "",
+            "## 中文摘要",
+            "",
+            summary,
+            "",
+            "## 要点",
+            "",
+            bullet_lines,
+            "",
+            "---",
+            "",
+            "_由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。_",
+            "",
+        ]
+    )
+    try:
+        abs_path.parent.mkdir(parents=True, exist_ok=True)
+        abs_path.write_text(md, encoding="utf-8")
+        print(f"[摘要] 已写入 {rel}", flush=True)
+    except OSError as e:
+        print(f"[摘要] 写入失败: {e}", flush=True)
+        return ""
+    return f"{_translate_view_base()}/{rel}"
+
+
 def _build_single_category_content(category, items):
     """构建单个分类的 Markdown 内容（使用 comment 灰色字体，视觉更紧凑）"""
     try:
@@ -1079,6 +1235,11 @@ def _build_single_category_content(category, items):
             lines.append(f"> {pri_t}　{time_str}（{src}）")
         else:
             lines.append(f"> {time_str}（{src}）")
+        # 英文稿附中文摘要页（存 GitHub，便于领导免验证码阅读）
+        if TRANSLATE_ENABLED and full and _should_translate_title(full):
+            summary_url = _ensure_chinese_body_summary(item, title)
+            if summary_url:
+                lines.append(f"> [中文摘要]({summary_url})")
         lines.append("")
     return "\n".join(lines).strip()
 
@@ -1425,7 +1586,7 @@ def main():
     ):
         ph = ",".join("?" * len(TIMED_PUSH_CATEGORIES))
         cur = conn.execute(
-            f"""SELECT link, title, published_str, category, author, source_url FROM articles
+            f"""SELECT link, title, published_str, category, author, source_url, summary FROM articles
                WHERE category IN ({ph}) AND link NOT IN (SELECT link FROM pushed)
                  AND link NOT IN (SELECT link FROM excluded)""",
             tuple(TIMED_PUSH_CATEGORIES),
@@ -1434,19 +1595,31 @@ def main():
         # --push-now --with-yesterday：临时把定时档六类扩到「今天或昨天」（北京），不沿用 9:30 时间窗
         if force_timed_digest and include_yesterday:
             rows = [
-                (l, t, ps, c, a, su)
-                for l, t, ps, c, a, su in rows
+                (l, t, ps, c, a, su, sm)
+                for l, t, ps, c, a, su, sm in rows
                 if _is_today_or_yesterday_beijing(_parse_published_to_beijing(ps))
             ]
         elif slot == (9, 30):
-            rows = [(l, t, ps, c, a, su) for l, t, ps, c, a, su in rows if _is_in_930_window(_parse_published_to_beijing(ps))]
+            rows = [
+                (l, t, ps, c, a, su, sm)
+                for l, t, ps, c, a, su, sm in rows
+                if _is_in_930_window(_parse_published_to_beijing(ps))
+            ]
         elif slot in ((12, 0), (15, 30), (17, 30)):
-            rows = [(l, t, ps, c, a, su) for l, t, ps, c, a, su in rows if _is_today_beijing(_parse_published_to_beijing(ps))]
+            rows = [
+                (l, t, ps, c, a, su, sm)
+                for l, t, ps, c, a, su, sm in rows
+                if _is_today_beijing(_parse_published_to_beijing(ps))
+            ]
         elif force_timed_digest:
-            rows = [(l, t, ps, c, a, su) for l, t, ps, c, a, su in rows if _is_today_beijing(_parse_published_to_beijing(ps))]
+            rows = [
+                (l, t, ps, c, a, su, sm)
+                for l, t, ps, c, a, su, sm in rows
+                if _is_today_beijing(_parse_published_to_beijing(ps))
+            ]
         if rows:
             row_items = []
-            for link, title, published_str, category, author, source_url in rows:
+            for link, title, published_str, category, author, source_url, summary in rows:
                 su = source_url or ""
                 st = _source_type_for_feed_url(su)
                 row_items.append({
@@ -1457,6 +1630,7 @@ def main():
                     "author": author or "",
                     "source_url": su,
                     "source_type": st,
+                    "summary": summary or "",
                 })
             row_items = _exclude_noise_items(conn, row_items)
             if row_items:

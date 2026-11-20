@@ -59,11 +59,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -f rss-wechat-pusher/rss_push.db 2>/dev/null || true
+          git add rss-wechat-pusher/translated/ 2>/dev/null || true
           if git diff --staged --quiet; then
-            echo "rss_push.db 无变化，跳过提交"
+            echo "无 db/摘要 变化，跳过提交"
             exit 0
           fi
-          git commit -m "chore: update rss push state"
+          git commit -m "chore: update rss push state and translated summaries"
           # 远端可能在此期间有新提交（你本地 push 等），先 rebase 再推避免 rejected
           git pull --rebase origin main
           git push origin main
