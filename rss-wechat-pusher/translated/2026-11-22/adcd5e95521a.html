@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Ghostscript -dSAFER沙箱绕过高危漏洞通告</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}
+h1{font-size:1.25rem;margin:0 0 12px;line-height:1.4}
+.meta{font-size:.9rem;color:#555;margin:0 0 20px}
+.meta a{color:#06c;word-break:break-all}
+h2{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}
+p{margin:0 0 12px;white-space:pre-wrap}
+ul{margin:0;padding-left:1.2em}
+li{margin:6px 0}
+.foot{margin-top:28px;font-size:.8rem;color:#888}
+</style>
+</head>
+<body>
+<h1>Ghostscript -dSAFER沙箱绕过高危漏洞通告</h1>
+<p class="meta">时间：2026-11-22 12:43<br/>来源：来源：奇安信 CERT公众号<br/>原文：<a href="https://mp.weixin.qq.com/s/R4gV2CHVQQqBui40pxpF8w">https://mp.weixin.qq.com/s/R4gV2CHVQQqBui40pxpF8w</a></p>
+<h2>中文摘要</h2>
+<p>奇安信CERT于2026年11月9日发现并公开了Artifex Ghostscript中的一个高危漏洞（CVE-2026-125396），该漏洞编号为QVD-2026-106490，CVSS评分为8.5。攻击者可利用此漏洞绕过-dSAFER沙箱限制，并通过构造恶意PostScript或PDF文档触发释放后使用（Use-After-Free）漏洞，进而破坏安全机制并执行任意代码，在Ghostscript进程权限下运行系统命令。影响版本为Artifex Ghostscript &lt; 10.08.0，广泛存在于Linux发行版及依赖组件中，如CUPS、ImageMagick、Roundcube、WordPress插件等。目前已有POC和EXP公开，但尚未发现实际在野利用。</p>
+<h2>要点</h2>
+<ul>
+<li>漏洞类型：沙箱绕过导致远程代码执行，CVSS评分8.5，属高危等级。</li>
+<li>影响范围广：受影响的组件包括CUPS打印服务、图像处理库（ImageMagick/Pillow）、邮件预览系统（Roundcube）、文档转换工具及部分WordPress插件等。</li>
+<li>技术原理：攻击者利用save/restore机制制造释放后使用漏洞，破坏-dSAFER安全模式，最终实现任意代码执行。</li>
+<li>修复建议：升级至Artifex Ghostscript 10.08.0及以上版本；临时缓解措施包括禁用公共上传功能、降低运行权限、监控异常行为等。</li>
+<li>当前状态：PoC与EXP已公开，无在野利用报告，建议尽快完成系统更新与加固。</li>
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>
