@@ -8,16 +8,13 @@
 应用线: OSS → intel-app 同步 → /api/v1 + Web
 ```
 
-## 部署（Railway 推荐；Zeabur 已停运勿再用）
+## 部署（阿里云轻量服务器推荐；Zeabur 勿再用）
 
-完整步骤见仓库 [`docs/迁移到-Railway.md`](../docs/迁移到-Railway.md)。
+完整步骤见 [`docs/迁移到-阿里云.md`](../docs/迁移到-阿里云.md)。
 
-1. [Railway](https://railway.app) → Deploy from GitHub → 本仓库  
-2. **Root Directory** = `intel-app`  
-3. 配置环境变量（见下）；建议 Volume 挂载 `/data`，并设 `INTEL_DATA_DIR=/data`  
-4. Generate Domain 后打开 `https://xxx.up.railway.app/`，用口令登录  
+摘要：在轻量应用服务器上 `docker build` + `docker run`（本目录已有 `Dockerfile`），配 `OSS_*` 与 `INTEL_*` 环境变量，映射 80→8080，数据目录挂 `/data`。
 
-也可用本目录 `Dockerfile` 部署到 Render / Fly.io。
+备选：Railway / Render / Fly（见 [`docs/迁移到-Railway.md`](../docs/迁移到-Railway.md)）。
 
 启动命令（`Procfile` / Docker）：
 

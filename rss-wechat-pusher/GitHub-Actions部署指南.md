@@ -144,19 +144,21 @@ python main.py --daily-brief-only [--date 2026-03-20] [--no-notify]
 
 ---
 
-## 第四步：用 Railway 做**唯一**调度（推荐；勿再用 Zeabur）
+## 第四步：用阿里云 FC 做**唯一**调度（推荐；勿再用 Zeabur）
 
-Zeabur [已宣布停运](https://zeabur.com/zh-CN/blogs/migrate-from-zeabur)。请把触发器迁到 **Railway**：见 [`docs/迁移到-Railway.md`](../docs/迁移到-Railway.md)。
+Zeabur [已宣布停运](https://zeabur.com/zh-CN/blogs/migrate-from-zeabur)。请用 **函数计算定时触发器**，见 [`docs/迁移到-阿里云.md`](../docs/迁移到-阿里云.md) 与 [`aliyun-fc-trigger/README.md`](../aliyun-fc-trigger/README.md)。
 
-GitHub 的 `schedule` 易漏跑且非北京时区，**推荐 workflow 只保留 `workflow_dispatch`**，由 **`zeabur-cron-trigger`**（目录名历史遗留）在 Railway 上按 **北京时间 cron** 触发。
+GitHub 的 `schedule` 易漏跑且非北京时区，**推荐 workflow 只保留 `workflow_dispatch`**。
 
-1. 打开 [Railway](https://railway.app)，Deploy from GitHub  
-2. **Root Directory** = `zeabur-cron-trigger`  
-3. 环境变量：`GITHUB_TOKEN` = PAT；`GITHUB_REPO` = `你的用户名/仓库名`  
-4. 部署后看日志的下次执行时间；到点后 Actions 会出现运行  
+1. FC 创建 Python 函数，入口 `index.handler`，代码用 `aliyun-fc-trigger/index.py`  
+2. 环境变量：`GITHUB_TOKEN`、`GITHUB_REPO`  
+3. 配置北京时区定时触发器（轮巡 6/18；定时 9:30/12:00/15:30/17:30）  
+4. 测试事件 `{"mode":"timed"}`，确认 Actions 被触发后，停掉旧 Zeabur/Railway 触发器  
 
 **为啥 Actions 里显示「Manually run by 我」？**  
 用 PAT 调 `workflow_dispatch` 时界面会像手动运行，属正常。
+
+（备选 Railway：见 [`docs/迁移到-Railway.md`](../docs/迁移到-Railway.md)。）
 
 ---
 

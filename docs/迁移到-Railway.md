@@ -1,6 +1,8 @@
-# 从 Zeabur 迁到 Railway（推荐）
+# 从 Zeabur 迁到 Railway（备选）
 
-Zeabur [停止运营](https://zeabur.com/zh-CN/blogs/migrate-from-zeabur)后，本仓库相关常驻服务改到 **Railway**（同类还有 Render / Fly.io，步骤类似）。
+> **更推荐阿里云**：见 [`迁移到-阿里云.md`](./迁移到-阿里云.md)（FC 定时触发 + 轻量服务器跑情报应用）。
+
+Zeabur [停止运营](https://zeabur.com/zh-CN/blogs/migrate-from-zeabur)后，若仍想用国外 PaaS，可用 **Railway**（同类还有 Render / Fly.io）。
 
 **不用迁、可继续用的：**
 
