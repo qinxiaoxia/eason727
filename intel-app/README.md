@@ -8,14 +8,18 @@
 应用线: OSS → intel-app 同步 → /api/v1 + Web
 ```
 
-## Zeabur 部署
+## 部署（Railway 推荐；Zeabur 已停运勿再用）
 
-1. 添加服务，选择本仓库  
-2. **Root Directory** = `intel-app`（无前导斜杠）  
-3. 配置环境变量（见下）  
-4. 部署后打开 `https://<服务>.zeabur.app/`，用口令登录  
+完整步骤见仓库 [`docs/迁移到-Railway.md`](../docs/迁移到-Railway.md)。
 
-启动命令（`Procfile` 已写）：
+1. [Railway](https://railway.app) → Deploy from GitHub → 本仓库  
+2. **Root Directory** = `intel-app`  
+3. 配置环境变量（见下）；建议 Volume 挂载 `/data`，并设 `INTEL_DATA_DIR=/data`  
+4. Generate Domain 后打开 `https://xxx.up.railway.app/`，用口令登录  
+
+也可用本目录 `Dockerfile` 部署到 Render / Fly.io。
+
+启动命令（`Procfile` / Docker）：
 
 ```bash
 uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}

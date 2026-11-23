@@ -1,6 +1,8 @@
-# Zeabur RSS Push 定时触发器（主调度）
+# RSS Push 定时触发器（主调度）
 
-**不再依赖 GitHub Actions 的 `schedule`**（易漏跑）。本服务在 Zeabur 上常驻，用 **APScheduler + 北京时间（`Asia/Shanghai`）cron** 调用 GitHub API 的 **`workflow_dispatch`**，分别触发：
+> **托管平台**：请用 **Railway**（或 Render / Fly）。**不要再新建 Zeabur 服务**（[Zeabur 停运](https://zeabur.com/zh-CN/blogs/migrate-from-zeabur)）。迁移步骤见 [`docs/迁移到-Railway.md`](../docs/迁移到-Railway.md)。
+
+**不再依赖 GitHub Actions 的 `schedule`**（易漏跑、且非北京时区）。本服务常驻，用 **APScheduler + 北京时间（`Asia/Shanghai`）cron** 调用 GitHub API 的 **`workflow_dispatch`**，分别触发：
 
 | 目标 workflow | 北京时间 | 说明 |
 |---------------|----------|------|
@@ -11,22 +13,22 @@
 
 ---
 
-## 部署到 Zeabur（推荐：独立仓库）
+## 部署到 Railway（推荐）
 
-若从主仓库部署时 Root Directory 报错，可用独立仓库：
+1. [railway.app](https://railway.app) → New Project → Deploy from GitHub → 选本仓库  
+2. **Root Directory** = `zeabur-cron-trigger`  
+3. 配置环境变量（见下表）  
+4. Deploy；看日志是否打印北京时间下次执行  
 
-1. 在 GitHub 新建空仓库，如 `rss-push-trigger`
-2. 把本目录下 `main.py`、`requirements.txt` 放到仓库**根目录**
-3. 在 Zeabur 添加服务，选择该仓库，**无需设置 Root Directory**
-4. 配置环境变量（见下表）
-5. 部署
+也可用本目录 `Dockerfile` 部署到 Render / Fly.io。
 
-## 部署到 Zeabur（从主仓库子目录）
+## 备选：独立小仓库
 
-1. 在 Zeabur 添加服务，选择你的 GitHub 仓库
-2. **Root Directory** 设为 `zeabur-cron-trigger`（无前导斜杠）
-3. 配置环境变量
-4. 部署
+若平台对 monorepo Root Directory 不友好：
+
+1. 新建空仓库，把本目录 `main.py`、`requirements.txt`、`Dockerfile` 放到根目录  
+2. 整库部署，无需 Root Directory  
+3. 配置同样环境变量
 
 ---
 
@@ -40,7 +42,7 @@
 | `WORKFLOW_TIMED` | 否 | 定时 workflow 文件名，默认 `rss-push-timed.yml` |
 | `TRIGGER_TIMEZONE` | 否 | IANA 时区，默认 `Asia/Shanghai` |
 | `GITHUB_REF` | 否 | 触发 workflow 的分支，默认 `main` |
-| `PORT` | 否 | Flask 监听端口，默认 `8080`（Zeabur 一般会注入） |
+| `PORT` | 否 | Flask 监听端口，默认 `8080`（Railway 一般会注入） |
 
 **已废弃（旧版 interval 触发）：** `INTERVAL_MINUTES`、`MIN_INTERVAL_MINUTES`、`I_ACCEPT_HOURLY_DUPLICATE_TRIGGER` — 可全部删除，改由上述 cron 调度。
 

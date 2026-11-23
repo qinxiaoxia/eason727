@@ -144,17 +144,19 @@ python main.py --daily-brief-only [--date 2026-03-20] [--no-notify]
 
 ---
 
-## 第四步：用 Zeabur 做**唯一**调度（推荐）
+## 第四步：用 Railway 做**唯一**调度（推荐；勿再用 Zeabur）
 
-GitHub 的 `schedule` 易漏跑，**推荐 workflow 里不写 `on.schedule`**，只保留 `workflow_dispatch`，由 **`zeabur-cron-trigger`** 在 Zeabur 上按 **北京时间 cron** 调用 API 触发（轮巡 6/8/12/14/18 整点 + 定时 9:30/15:30）。详见仓库内 `zeabur-cron-trigger/README.md`。
+Zeabur [已宣布停运](https://zeabur.com/zh-CN/blogs/migrate-from-zeabur)。请把触发器迁到 **Railway**：见 [`docs/迁移到-Railway.md`](../docs/迁移到-Railway.md)。
 
-1. 打开 [Zeabur](https://zeabur.com)，创建项目，从 GitHub 导入你的仓库
-2. 添加服务，**Root Directory** 设为 `zeabur-cron-trigger`
-3. 环境变量：`GITHUB_TOKEN` = PAT（需能触发 Actions，见该 README 表）；`GITHUB_REPO` = `你的用户名/仓库名`
-4. 部署后看 Zeabur 日志应打印调度说明；到点后 GitHub Actions 会出现对应运行
+GitHub 的 `schedule` 易漏跑且非北京时区，**推荐 workflow 只保留 `workflow_dispatch`**，由 **`zeabur-cron-trigger`**（目录名历史遗留）在 Railway 上按 **北京时间 cron** 触发。
+
+1. 打开 [Railway](https://railway.app)，Deploy from GitHub  
+2. **Root Directory** = `zeabur-cron-trigger`  
+3. 环境变量：`GITHUB_TOKEN` = PAT；`GITHUB_REPO` = `你的用户名/仓库名`  
+4. 部署后看日志的下次执行时间；到点后 Actions 会出现运行  
 
 **为啥 Actions 里显示「Manually run by 我」？**  
-**Zeabur 用 PAT 调 `workflow_dispatch`**，界面会像手动运行，属正常。
+用 PAT 调 `workflow_dispatch` 时界面会像手动运行，属正常。
 
 ---
 
