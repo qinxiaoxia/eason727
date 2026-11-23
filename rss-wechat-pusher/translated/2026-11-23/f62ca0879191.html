@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Xalgorix：开源AI渗透测试工具</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}
+h1{font-size:1.25rem;margin:0 0 12px;line-height:1.4}
+.meta{font-size:.9rem;color:#555;margin:0 0 20px}
+.meta a{color:#06c;word-break:break-all}
+h2{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}
+p{margin:0 0 12px;white-space:pre-wrap}
+ul{margin:0;padding-left:1.2em}
+li{margin:6px 0}
+.foot{margin-top:28px;font-size:.8rem;color:#888}
+</style>
+</head>
+<body>
+<h1>Xalgorix：开源AI渗透测试工具</h1>
+<p class="meta">时间：2026-11-23 14:30<br/>来源：未知网站<br/>原文：<a href="https://www.helpnetsecurity.com/2026/11/23/xalgorix-ai-penetration-testing-tool/">https://www.helpnetsecurity.com/2026/11/23/xalgorix-ai-penetration-testing-tool/</a></p>
+<h2>中文摘要</h2>
+<p>Xalgorix 是一个开源的AI渗透测试工具，旨在减少传统漏洞扫描中的误报问题。该工具采用双代理机制，当主要代理发现漏洞时，会由第二个独立的验证代理重新尝试利用该漏洞以确认其真实性。验证代理从全新上下文开始操作，使用只读工具，并对不同类型的漏洞设定不同的验证标准，例如跨站脚本（XSS）必须实际执行才算数，而服务器端请求伪造（SSRF）需要来自目标服务器的HTTP回调。如果验证失败或无法排除漏洞存在，则报告将被标记为需人工审核。Xalgorix基于Go语言开发，提供本地Web仪表板，兼容包括本地模型在内的七种大语言模型（LLMs），并集成Nmap、Nuclei和SQLmap等常用安全工具。项目采用Apache-2.0许可证，代码已公开在GitHub上。目前团队尚未公布详细的基准测试分数，但正在进行XBOW基准测试的初步验证工作。据开发者Krishna Kumar介绍，Claude Opus 5.5在测试中表现最佳，而较弱的语言模型容易产生无效的工具调用。运行时需要以root权限启动容器，并建议将其置于隔离网络环境中作为一次性沙箱使用。</p>
+<h2>要点</h2>
+<ul>
+<li>Xalgorix 是一个开源AI驱动的渗透测试工具，通过双重代理机制降低误报率。</li>
+<li>主要代理发现漏洞后，由独立的验证代理重新尝试利用以确认其有效性。</li>
+<li>验证过程针对不同漏洞类型设定了严格的判定标准，如XSS必须实现脚本执行。</li>
+<li>支持多种大语言模型（LLMs）并与主流安全工具集成，采用Apache-2.0许可开源。</li>
+<li>目前未公开完整的基准测试成绩，但正在参与XBOW基准测试评估。</li>
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>
