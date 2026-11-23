@@ -34,13 +34,53 @@ def _beijing_day_from_published(published_str: str, fallback: str = "") -> str:
     return fallback or datetime.utcnow().strftime("%Y-%m-%d")
 
 
+def _parse_json_list(raw: str) -> List[Any]:
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    return data if isinstance(data, list) else []
+
+
 def _row_to_item(row) -> Dict[str, Any]:
-    link, title, summary, category, incident_priority, author, source_url, published_str, first_seen_at = row
+    (
+        link,
+        title,
+        summary,
+        category,
+        incident_priority,
+        author,
+        source_url,
+        published_str,
+        first_seen_at,
+        title_zh,
+        summary_zh,
+        summary_url,
+        tags_json,
+        cves_json,
+        iocs_json,
+        entities_json,
+    ) = row
     day = _beijing_day_from_published(published_str or "", (first_seen_at or "")[:10])
+    tags = [str(x) for x in _parse_json_list(tags_json or "") if str(x).strip()]
+    cves = [str(x).upper() for x in _parse_json_list(cves_json or "") if str(x).strip()]
+    display_title = (title_zh or "").strip() or (title or "")
+    display_summary = (summary_zh or "").strip() or (summary or "")
     return {
         "link": link or "",
         "title": title or "",
+        "title_zh": (title_zh or "").strip(),
+        "display_title": display_title,
         "summary": (summary or "")[:2000],
+        "summary_zh": (summary_zh or "")[:4000],
+        "display_summary": display_summary[:2000],
+        "summary_url": (summary_url or "").strip(),
+        "tags": tags,
+        "cves": cves,
+        "iocs": _parse_json_list(iocs_json or ""),
+        "entities": _parse_json_list(entities_json or ""),
         "category": category or "",
         "incident_priority": incident_priority or "",
         "author": author or "",
@@ -52,9 +92,24 @@ def _row_to_item(row) -> Dict[str, Any]:
 
 
 def load_articles_from_db(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
+    # 兼容尚未迁移的旧库
+    cur = conn.execute("PRAGMA table_info(articles)")
+    cols = {row[1] for row in cur.fetchall()}
+    extra = [
+        "title_zh",
+        "summary_zh",
+        "summary_url",
+        "tags_json",
+        "cves_json",
+        "iocs_json",
+        "entities_json",
+    ]
+    select_extra = ", ".join(
+        (c if c in cols else f"NULL AS {c}") for c in extra
+    )
     cur = conn.execute(
-        """SELECT link, title, summary, category, incident_priority, author,
-                  source_url, published_str, first_seen_at
+        f"""SELECT link, title, summary, category, incident_priority, author,
+                  source_url, published_str, first_seen_at, {select_extra}
            FROM articles ORDER BY published_str DESC, first_seen_at DESC"""
     )
     return [_row_to_item(r) for r in cur.fetchall()]
@@ -104,16 +159,69 @@ def _cat_file_slug(cat: str) -> str:
     return "c-" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10]
 
 
+def _catalog_to_light(catalog: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """统一成卡片用轻量字段（含标签/CVE/双链接，便于网页内查找）。"""
+    light: List[Dict[str, Any]] = []
+    for it in catalog:
+        title = (it.get("display_title") or it.get("title_zh") or it.get("title") or "")[:200]
+        summary = _strip_tags(
+            it.get("display_summary") or it.get("summary_zh") or it.get("summary") or ""
+        )[:220]
+        tags = it.get("tags") or []
+        if isinstance(tags, str):
+            tags = _parse_json_list(tags)
+        cves = it.get("cves") or []
+        if isinstance(cves, str):
+            cves = _parse_json_list(cves)
+        tags = [str(x) for x in tags if str(x).strip()][:8]
+        cves = [str(x).upper() for x in cves if str(x).strip()][:8]
+        light.append(
+            {
+                "t": title,
+                "s": summary,
+                "c": (it.get("category") or "").strip() or "未分类",
+                "a": (it.get("author") or "")[:40],
+                "l": it.get("link") or "",
+                "su": (it.get("summary_url") or "").strip(),
+                "d": it.get("day") or "",
+                "p": (it.get("published_str") or "")[:16],
+                "tags": tags,
+                "cves": cves,
+                # 供浏览器「在网页中查找」命中
+                "kw": " ".join([title, summary] + tags + cves),
+            }
+        )
+    return light
+
+
 def _render_cards(items: List[Dict[str, Any]], limit: int = 500) -> str:
     cards = []
     for it in items[:limit]:
         cat = it["c"] or "未分类"
+        tag_html = "".join(
+            f'<span class="tag">{_html_esc(t)}</span>' for t in (it.get("tags") or [])
+        )
+        cve_html = "".join(
+            f'<span class="cve">{_html_esc(c)}</span>' for c in (it.get("cves") or [])
+        )
+        badges = ""
+        if tag_html or cve_html:
+            badges = f'<div class="tags">{tag_html}{cve_html}</div>'
+        links = (
+            f'<a class="link" href="{_html_esc(it["l"])}" target="_blank" rel="noopener">原文链接</a>'
+        )
+        if it.get("su"):
+            links += (
+                f'<a class="link" href="{_html_esc(it["su"])}" target="_blank" rel="noopener">中文摘要</a>'
+            )
         cards.append(
             f'<div class="card" data-cat="{_html_esc(cat)}">'
             f'<h3><span class="cat">{_html_esc(cat)}</span>{_html_esc(it["t"])}</h3>'
             f'<div class="meta">{_html_esc(it["d"])} · {_html_esc(it["a"])} · {_html_esc(it["p"])}</div>'
+            f"{badges}"
             f'<p class="sum">{_html_esc(it["s"])}</p>'
-            f'<a class="link" href="{_html_esc(it["l"])}" target="_blank" rel="noopener">原文链接</a>'
+            f'<div class="links">{links}</div>'
+            f'<span style="display:none">{_html_esc(it.get("kw") or "")}</span>'
             f"</div>"
         )
     return "\n".join(cards) or '<div class="empty">暂无归档</div>'
@@ -154,7 +262,12 @@ border:1px solid #ddd;font-size:.92rem;cursor:pointer;-webkit-tap-highlight-colo
 .meta{{font-size:.8rem;color:#666}}
 .sum{{font-size:.9rem;margin:8px 0 6px;white-space:pre-wrap;color:#333}}
 .cat{{display:inline-block;background:#eef5fb;color:#1a6fb5;padding:1px 6px;border-radius:4px;margin-right:6px}}
-a.link{{color:#06c;word-break:break-all}}
+.tags{{margin:6px 0 4px;line-height:1.6}}
+.tag,.cve{{display:inline-block;font-size:.75rem;padding:1px 6px;border-radius:4px;margin:0 4px 4px 0}}
+.tag{{background:#f0f0f0;color:#444}}
+.cve{{background:#fff4e5;color:#a15c00}}
+.links{{margin-top:6px}}
+a.link{{color:#06c;word-break:break-all;margin-right:12px}}
 .empty{{color:#888;padding:24px 0}}
 .tip{{font-size:.85rem;color:#888;margin:0 0 14px;line-height:1.45}}
 .searchbox{{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px;align-items:center}}
@@ -178,19 +291,7 @@ def _build_search_html(catalog: List[Dict[str, Any]]) -> str:
     主检索页：列表服务端渲染；分类用「链接跳转分类页」+「纯 CSS radio 筛选」，
     不依赖企微执行 JS。关键词用浏览器原生查找（并提供可选 JS 增强）。
     """
-    light: List[Dict[str, Any]] = []
-    for it in catalog:
-        light.append(
-            {
-                "t": (it.get("title") or "")[:200],
-                "s": _strip_tags(it.get("summary") or "")[:160],
-                "c": (it.get("category") or "").strip() or "未分类",
-                "a": (it.get("author") or "")[:40],
-                "l": it.get("link") or "",
-                "d": it.get("day") or "",
-                "p": (it.get("published_str") or "")[:16],
-            }
-        )
+    light = _catalog_to_light(catalog)
 
     cats = sorted({x["c"] for x in light})
     # 纯 CSS radio：点分类即隐藏其它卡片（企微无 JS 也能用）
@@ -224,7 +325,7 @@ def _build_search_html(catalog: List[Dict[str, Any]]) -> str:
         + "</div>"
         + '<p class="tip">推荐：点上方蓝色链接进入「分类专页」。'
         + "本页下方标签也可即时筛选。"
-        + "搜关键词：用系统「在网页中查找」。</p>"
+        + "搜关键词/CVE：用系统「在网页中查找」（标题、摘要、标签、CVE 均可命中）。</p>"
     )
 
     body = f'<div id="list">\n{_render_cards(light, 500)}\n</div>'
@@ -258,19 +359,7 @@ def ensure_search_page(catalog: Optional[List[Dict[str, Any]]] = None) -> Option
     if not oss_enabled():
         return None
     catalog = catalog or []
-    light: List[Dict[str, Any]] = []
-    for it in catalog:
-        light.append(
-            {
-                "t": (it.get("title") or "")[:200],
-                "s": _strip_tags(it.get("summary") or "")[:160],
-                "c": (it.get("category") or "").strip() or "未分类",
-                "a": (it.get("author") or "")[:40],
-                "l": it.get("link") or "",
-                "d": it.get("day") or "",
-                "p": (it.get("published_str") or "")[:16],
-            }
-        )
+    light = _catalog_to_light(catalog)
     prefix = kb_prefix()
     # 主页
     url = upload_html(f"{prefix}search.html", _build_search_html(catalog))
@@ -311,13 +400,20 @@ def sync_knowledge_base(conn: sqlite3.Connection) -> Dict[str, Any]:
 
     upload_json(f"{prefix}days/index.json", {"days": days_sorted, "updated_at": datetime.utcnow().isoformat() + "Z"})
 
-    # catalog：按时间新到旧截断，字段精简便于搜索页加载
+    # catalog：按时间新到旧截断；含中文摘要/标签/CVE/双链接
     catalog = []
     for it in items[:_CATALOG_LIMIT]:
         catalog.append(
             {
                 "title": it["title"],
+                "title_zh": it.get("title_zh") or "",
+                "display_title": it.get("display_title") or it["title"],
                 "summary": (it["summary"] or "")[:400],
+                "summary_zh": (it.get("summary_zh") or "")[:800],
+                "display_summary": (it.get("display_summary") or it["summary"] or "")[:400],
+                "summary_url": it.get("summary_url") or "",
+                "tags": it.get("tags") or [],
+                "cves": it.get("cves") or [],
                 "category": it["category"],
                 "author": it["author"],
                 "link": it["link"],

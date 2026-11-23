@@ -43,38 +43,54 @@ def _db_path() -> Path:
 
 
 def _articles_for_day(conn: sqlite3.Connection, day: str) -> List[Dict[str, Any]]:
-    # published_str 前 10 位或 first_seen_at 日期
-    cur = conn.execute(
-        """SELECT link, title, summary, category, incident_priority, author, published_str
-           FROM articles
-           WHERE substr(COALESCE(published_str,''),1,10)=?
-              OR substr(COALESCE(first_seen_at,''),1,10)=?
-           ORDER BY
-             CASE category
-               WHEN '监管机构预警' THEN 0
-               WHEN '重大安全事件' THEN 1
-               WHEN '漏洞信息' THEN 2
-               WHEN '网安新闻资讯' THEN 3
-               WHEN '网安赛事资讯' THEN 4
-               WHEN 'AI与信息安全技术' THEN 5
-               WHEN 'AI行业资讯' THEN 6
-               ELSE 9
-             END,
-             published_str DESC""",
-        (day, day),
-    )
+    # published_str 前 10 位或 first_seen_at 日期；兼容情报库扩展列
+    cur = conn.execute("PRAGMA table_info(articles)")
+    cols = {row[1] for row in cur.fetchall()}
+    has_intel = "title_zh" in cols and "summary_url" in cols
+    if has_intel:
+        sql = """SELECT link, title, summary, category, incident_priority, author, published_str,
+                        title_zh, summary_zh, summary_url
+                 FROM articles
+                 WHERE substr(COALESCE(published_str,''),1,10)=?
+                    OR substr(COALESCE(first_seen_at,''),1,10)=?
+                 ORDER BY
+                   CASE category
+                     WHEN '监管机构预警' THEN 0
+                     WHEN '重大安全事件' THEN 1
+                     WHEN '漏洞信息' THEN 2
+                     WHEN '网安新闻资讯' THEN 3
+                     WHEN '网安赛事资讯' THEN 4
+                     WHEN 'AI与信息安全技术' THEN 5
+                     WHEN 'AI行业资讯' THEN 6
+                     ELSE 9
+                   END,
+                   published_str DESC"""
+    else:
+        sql = """SELECT link, title, summary, category, incident_priority, author, published_str
+                 FROM articles
+                 WHERE substr(COALESCE(published_str,''),1,10)=?
+                    OR substr(COALESCE(first_seen_at,''),1,10)=?
+                 ORDER BY published_str DESC"""
+    cur = conn.execute(sql, (day, day))
     rows = []
-    for link, title, summary, category, pri, author, published_str in cur.fetchall():
+    for row in cur.fetchall():
+        if has_intel:
+            link, title, summary, category, pri, author, published_str, title_zh, summary_zh, summary_url = row
+        else:
+            link, title, summary, category, pri, author, published_str = row
+            title_zh = summary_zh = summary_url = ""
+        display = (title_zh or "").strip() or (title or "")
         rows.append(
             {
                 "link": link or "",
-                "title": title or "",
-                "summary": (summary or "")[:600],
+                "title": display,
+                "title_orig": title or "",
+                "summary": ((summary_zh or summary or ""))[:600],
                 "category": category or "其他资讯",
                 "incident_priority": pri or "",
                 "author": author or "",
                 "published_str": published_str or "",
-                "summary_url": "",
+                "summary_url": (summary_url or "").strip(),
                 "is_english": False,
             }
         )

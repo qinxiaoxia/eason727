@@ -130,11 +130,27 @@ def init_db(conn):
 
 
 def _migrate_articles_schema(conn):
-    """为旧库补充 incidents 优先级等列。"""
+    """为旧库补充 incidents 优先级、情报库扩展列等。"""
     cur = conn.execute("PRAGMA table_info(articles)")
     cols = {row[1] for row in cur.fetchall()}
+    alters = []
     if "incident_priority" not in cols:
-        conn.execute("ALTER TABLE articles ADD COLUMN incident_priority TEXT")
+        alters.append("ALTER TABLE articles ADD COLUMN incident_priority TEXT")
+    # 长期情报库字段（JSON 文本列，少表好迁）
+    for col in (
+        "title_zh",
+        "summary_zh",
+        "summary_url",
+        "tags_json",
+        "cves_json",
+        "iocs_json",
+        "entities_json",
+    ):
+        if col not in cols:
+            alters.append(f"ALTER TABLE articles ADD COLUMN {col} TEXT")
+    for sql in alters:
+        conn.execute(sql)
+    if alters:
         conn.commit()
 
 
@@ -730,23 +746,177 @@ IOC_ALERT_AUTHOR = "国家网络安全通报中心"
 # 翻译缓存，避免重复调用
 _translate_cache = {}
 
+# Cookie 墙 / 验证码 / Cloudflare 等「假正文」特征
+_JUNK_PAGE_RE = re.compile(
+    r"cookie\s*policy|we use cookies|accept\s*(all\s*)?cookies|necessary cookies|"
+    r"non[-\s]?necessary cookies|manage consent|gdpr|cf-browser-verification|"
+    r"just a moment|checking your browser|attention required|enable javascript|"
+    r"captcha|cloudflare|verify you are human|access denied|"
+    r"必要的?\s*cookie|非必要的?\s*cookie|接受\s*cookie|cookie\s*同意",
+    re.I,
+)
 
-def _fetch_article_text(url):
-    """抓取文章正文（支持微信公众号等）"""
+
+def _html_to_plain(html: str) -> str:
+    if not html:
+        return ""
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["script", "style", "noscript", "svg", "iframe"]):
+        tag.decompose()
+    return soup.get_text(separator="\n", strip=True)
+
+
+def _entry_plain_text(entry) -> str:
+    """从 RSS entry 取最长可用正文（content:encoded 优先于 summary）。"""
+    chunks = []
+    content = getattr(entry, "content", None) or (entry.get("content") if hasattr(entry, "get") else None)
+    if content:
+        for c in content:
+            if isinstance(c, dict):
+                chunks.append(c.get("value") or "")
+            else:
+                val = getattr(c, "value", None)
+                chunks.append(val if val is not None else str(c))
+    for key in ("summary", "description"):
+        if hasattr(entry, "get"):
+            chunks.append(entry.get(key) or "")
+        else:
+            chunks.append(getattr(entry, key, "") or "")
+    plains = [_html_to_plain(x) for x in chunks if x]
+    plains = [p for p in plains if len(p) >= 40]
+    if not plains:
+        return ""
+    return max(plains, key=len)
+
+
+def _is_junk_web_text(text: str, title: str = "") -> bool:
+    """
+    判断是否为 Cookie 墙 / 验证码页 / 反爬挑战页等无效正文。
+    标题里的关键词若几乎不出现在正文里，也视为抓错页。
+    """
+    t = (text or "").strip()
+    if len(t) < 40:
+        return True
+    low = t.lower()
+    junk_hits = len(_JUNK_PAGE_RE.findall(t)) + len(_JUNK_PAGE_RE.findall(low))
+    # 去重粗算：同一模式可能重复匹配
+    if _JUNK_PAGE_RE.search(t) or _JUNK_PAGE_RE.search(low):
+        # Cookie 文案占比高，或几乎没有实质段落
+        cookie_ratio = (low.count("cookie") + t.count("Cookie") + t.count("cookie")) / max(len(t), 1)
+        if cookie_ratio > 0.008 or junk_hits >= 2:
+            return True
+        if ("必要" in t or "consent" in low) and "cookie" in low:
+            return True
+
+    # 英文标题关键词应在正文出现；否则多半抓到了外壳页
+    words = re.findall(r"[A-Za-z]{4,}", title or "")
+    # 去掉过于通用的词
+    stop = {
+        "that", "this", "with", "from", "your", "have", "will", "been",
+        "were", "they", "their", "about", "into", "also", "more", "than",
+    }
+    words = [w for w in words if w.lower() not in stop]
+    if len(words) >= 3:
+        hits = sum(1 for w in words if w.lower() in low)
+        if hits < max(1, len(words) // 5):
+            return True
+    return False
+
+
+def _fetch_via_jina(url: str) -> str:
+    """
+    用 Jina Reader 拉取可读正文（绕过部分 Cookie/简易反爬）。
+    可用环境变量 ARTICLE_JINA_READER=0 关闭。
+    """
+    if (os.getenv("ARTICLE_JINA_READER", "1") or "1").strip().lower() in (
+        "0",
+        "false",
+        "no",
+        "off",
+    ):
+        return ""
+    target = (url or "").strip()
+    if not target.startswith("http"):
+        return ""
+    # r.jina.ai 接受 https://r.jina.ai/<url>
+    proxy = f"https://r.jina.ai/{target}"
     try:
-        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}, timeout=15)
+        r = requests.get(
+            proxy,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (compatible; rss-wechat-pusher/1.0; +https://github.com/)"
+                ),
+                "Accept": "text/plain,text/markdown,*/*",
+            },
+            timeout=25,
+        )
+        if r.status_code >= 400:
+            return ""
+        text = (r.text or "").strip()
+        # Jina 会带 Title/URL Meta；去掉过短或明显失败页
+        if len(text) < 120:
+            return ""
+        if _is_junk_web_text(text):
+            return ""
+        return text[:20000]
+    except Exception:
+        return ""
+
+
+def _extract_main_text_from_html(html: str) -> str:
+    soup = BeautifulSoup(html or "", "html.parser")
+    for tag in soup(["script", "style", "noscript", "svg", "iframe", "nav", "footer", "aside"]):
+        tag.decompose()
+    body = (
+        soup.find(id="js_content")
+        or soup.find(class_=re.compile(r"rich_media_content|entry-content|post-content|article-content|td-post-content", re.I))
+        or soup.find("article")
+        or soup.find("main")
+    )
+    if body:
+        return body.get_text(separator="\n", strip=True)
+    el = soup.find("body")
+    return el.get_text(separator="\n", strip=True) if el else ""
+
+
+def _fetch_article_text(url, title: str = ""):
+    """
+    抓取文章正文。
+    顺序：直连页面 → 失败/Cookie墙时用 Jina Reader。
+    返回空串表示无法得到可用正文（调用方应回退 RSS summary）。
+    """
+    ua = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    )
+    headers = {
+        "User-Agent": ua,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8",
+        "Cache-Control": "no-cache",
+    }
+    text = ""
+    try:
+        r = requests.get(url, headers=headers, timeout=18, allow_redirects=True)
         r.raise_for_status()
         r.encoding = r.apparent_encoding or "utf-8"
-        soup = BeautifulSoup(r.text, "html.parser")
-        body = soup.find(id="js_content") or soup.find(class_=re.compile("rich_media_content|content"))
-        if body:
-            return body.get_text(separator="\n", strip=True)
-        for tag in ("article", "main", "body"):
-            el = soup.find(tag)
-            if el:
-                return el.get_text(separator="\n", strip=True)
+        text = _extract_main_text_from_html(r.text)
     except Exception:
-        pass
+        text = ""
+
+    if text and not _is_junk_web_text(text, title):
+        return text
+
+    if text and _is_junk_web_text(text, title):
+        print(f"[抓取] 疑似 Cookie/验证码页，改用可读代理: {(url or '')[:60]}", flush=True)
+    else:
+        print(f"[抓取] 直连失败或正文过短，改用可读代理: {(url or '')[:60]}", flush=True)
+
+    jina = _fetch_via_jina(url)
+    if jina and not _is_junk_web_text(jina, title):
+        return jina
+    # 直连文本若并非 junk 只是短，上面已返回；此处 junk/空则放弃
     return ""
 
 
@@ -927,10 +1097,22 @@ def _build_ioc_push_content(item):
             title = f"{t2}（译）"
     link = item.get("link") or ""
     time_str = item.get("published_str") or ""
-    text = _fetch_article_text(link)
+    text = _fetch_article_text(link, title=title)
     pairs = _extract_iocs(text, title)
     if not pairs:
         return None  # 无有效 IOC，用基础格式
+    try:
+        from intel_store import iocs_from_pairs, persist_article_enrichment
+
+        persist_article_enrichment(
+            link,
+            title=item.get("title") or title,
+            summary=item.get("summary") or "",
+            category=item.get("category") or "监管机构预警",
+            iocs_json=iocs_from_pairs(pairs),
+        )
+    except Exception as e:
+        print(f"[IOC] 回写情报库失败: {e}", flush=True)
     feed_url = item.get("source_url") or ""
     st = item.get("source_type") or _source_type_for_feed_url(feed_url)
     src = _source_bracket_label(item.get("author") or "", st, feed_url)
@@ -1158,6 +1340,8 @@ _BODY_SUMMARY_SYSTEM = (
     "请提炼领导可快速阅读的中文内容，只输出 JSON 对象，不要 markdown 代码围栏："
     '{"summary":"约300到500字中文摘要","bullets":["要点1","要点2","要点3"]}'
     "bullets 3到5条；不要编造正文没有的事实；专有名词可保留英文。"
+    "若正文明显是 Cookie 声明、隐私政策、验证码/人机验证页而非文章，"
+    "则输出 {\"summary\":\"\",\"bullets\":[]}。"
 )
 
 
@@ -1198,6 +1382,9 @@ def _render_summary_html(
 ) -> str:
     esc = _html_escape
     lis = "\n".join(f"<li>{esc(b)}</li>" for b in bullets) or "<li>（无）</li>"
+    src_line = (src or "").strip()
+    if src_line and not src_line.startswith("来源"):
+        src_line = f"来源：{src_line}"
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -1219,7 +1406,7 @@ li{{margin:6px 0}}
 </head>
 <body>
 <h1>{esc(cn_title)}</h1>
-<p class="meta">时间：{esc(time_str)}<br/>来源：{esc(src)}<br/>原文：<a href="{esc(link)}">{esc(link)}</a></p>
+<p class="meta">时间：{esc(time_str)}<br/>{esc(src_line)}<br/>原文：<a href="{esc(link)}">{esc(link)}</a></p>
 <h2>中文摘要</h2>
 <p>{esc(summary)}</p>
 <h2>要点</h2>
@@ -1232,9 +1419,26 @@ li{{margin:6px 0}}
 """
 
 
+def _summary_html_looks_junk(html: str, title: str = "") -> bool:
+    """已生成的摘要页若在讲 Cookie/验证码，视为脏缓存需重做。"""
+    if not html or len(html) < 40:
+        return True
+    plain = _html_to_plain(html)
+    if _is_junk_web_text(plain, title):
+        return True
+    if ("Cookie" in plain or "cookie" in plain) and (
+        "必要" in plain or "非必要" in plain or "同意" in plain
+    ):
+        tl = (title or "").lower()
+        if "cookie" not in tl and "隐私" not in (title or "") and "privacy" not in tl:
+            return True
+    return False
+
+
 def _ensure_chinese_body_summary(item: dict, display_title: str) -> str:
     """
     英文稿：抓正文→中文摘要+要点→写本地并上传阿里云 OSS，返回 OSS 公开 URL；失败返回空串。
+    正文优先：直连/Jina → RSS summary；并过滤 Cookie/验证码假页面。
     """
     if not _body_summary_enabled():
         return ""
@@ -1251,16 +1455,31 @@ def _ensure_chinese_body_summary(item: dict, display_title: str) -> str:
     abs_path = repo_root / rel
 
     if abs_path.is_file() and abs_path.stat().st_size > 80:
-        url = _summary_public_url(link, published_str, abs_path)
-        if url:
-            return url
+        try:
+            existing = abs_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            existing = ""
+        if existing and not _summary_html_looks_junk(existing, title):
+            url = _summary_public_url(link, published_str, abs_path)
+            if url:
+                return url
+        else:
+            print(f"[摘要] 发现脏缓存（Cookie/验证码页），重新生成: {title[:40]}", flush=True)
 
-    body = _fetch_article_text(link)
-    if len(body) < 80:
-        body = (item.get("summary") or "").strip()
-    if len(body) < 40:
-        print(f"[摘要] 正文过短，跳过: {title[:40]}", flush=True)
-        return ""
+    body = _fetch_article_text(link, title=title)
+    rss_sum = _html_to_plain(item.get("summary") or "")
+    if (not body or _is_junk_web_text(body, title)) and rss_sum and not _is_junk_web_text(
+        rss_sum, title
+    ):
+        print(f"[摘要] 页面不可用，改用 RSS 摘要: {title[:40]}", flush=True)
+        body = rss_sum
+    if not body or _is_junk_web_text(body, title):
+        print(f"[摘要] 无可用正文，按标题生成简要说明: {title[:40]}", flush=True)
+        body = (
+            "(Full article text unavailable due to site protection.)\n"
+            f"Title: {title}\n"
+            "Please summarize only from the title; state that details need the original link."
+        )
 
     from llm_utils import call_llm_with_fallback, get_llm_providers
 
@@ -1277,6 +1496,9 @@ def _ensure_chinese_body_summary(item: dict, display_title: str) -> str:
         print(f"[摘要] LLM 解析失败: {title[:40]}", flush=True)
         return ""
     summary, bullets = parsed
+    if _is_junk_web_text(summary, title) or _summary_html_looks_junk(summary, title):
+        print(f"[摘要] LLM 仍输出 Cookie/无效内容，丢弃: {title[:40]}", flush=True)
+        return ""
     feed_url = item.get("source_url") or ""
     st = item.get("source_type") or _source_type_for_feed_url(feed_url)
     src = _source_bracket_label(item.get("author") or "", st, feed_url)
@@ -1301,10 +1523,29 @@ def _ensure_chinese_body_summary(item: dict, display_title: str) -> str:
     try:
         url = upload_html(oss_object_key(day, slug), html)
         print(f"[摘要] 已上传 OSS: {url}", flush=True)
-        return url
     except Exception as e:
         print(f"[摘要] OSS 上传失败: {e}", flush=True)
         return ""
+
+    # 回写情报库：中文标题/摘要/链接 + 标签/CVE/实体
+    try:
+        from intel_store import persist_article_enrichment
+
+        zh_body = summary
+        if bullets:
+            zh_body = summary + "\n" + "\n".join(f"· {b}" for b in bullets)
+        persist_article_enrichment(
+            link,
+            title=title,
+            summary=item.get("summary") or "",
+            category=item.get("category") or "",
+            title_zh=cn_title,
+            summary_zh=zh_body[:4000],
+            summary_url=url,
+        )
+    except Exception as e:
+        print(f"[摘要] 回写情报库失败: {e}", flush=True)
+    return url
 
 
 def _build_single_category_content(category, items):
@@ -1550,7 +1791,7 @@ def main():
                 skipped_excluded += 1
             continue
         title = (entry.get("title") or "").strip()
-        summary = entry.get("summary") or ""
+        summary = _entry_plain_text(entry) or (entry.get("summary") or "")
         author = get_author(entry)
         published_str = format_published(entry)
         noise_label = exclusion_reason(author, title, summary, source_type)
@@ -1567,7 +1808,7 @@ def main():
         feed_url, source_type, entry = item
         link = _normalize_entry_link(entry.get("link") or "", feed_url)
         title = (entry.get("title") or "").strip()
-        summary = entry.get("summary") or ""
+        summary = _entry_plain_text(entry) or (entry.get("summary") or "")
         author = get_author(entry)
         published_str = format_published(entry)
         category, incident_priority = classify(author, title, summary, source_type)
@@ -1617,6 +1858,22 @@ def main():
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (link, title, summary, category, incident_priority, author, feed_url, published_str, insert_now),
         )
+        try:
+            from intel_store import persist_article_enrichment
+
+            title_zh = ""
+            if title and _has_chinese(title) and not _should_translate_title(title):
+                title_zh = title
+            persist_article_enrichment(
+                link,
+                title=title,
+                summary=summary or "",
+                category=category or "",
+                title_zh=title_zh,
+                conn=conn,
+            )
+        except Exception as e:
+            print(f"[情报] 新稿标注失败: {e}", flush=True)
         known.add(link)
         # 监管预警、重大事件→实时推送（公众号+网站均支持，以分类为准）
         if category in REALTIME_CATEGORIES and link not in pushed:
@@ -1845,7 +2102,7 @@ def test_ioc():
     if not item["published_str"]:
         print("警告：RSS 未命中该链接，时间字段为空", flush=True)
     print(f"测试 IOC 提取: {url}")
-    text = _fetch_article_text(url)
+    text = _fetch_article_text(url, title=title)
     pairs = _extract_iocs(text, title)
     print(f"提取到 {len(pairs)} 条 IOC")
     for i, p in enumerate(pairs, 1):
