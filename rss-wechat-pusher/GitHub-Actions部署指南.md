@@ -116,7 +116,7 @@ GitHub / jsDelivr 国内常打不开，摘要 HTML 上传到 OSS，企微只放�
 
 - 检索页：`https://<OSS_PUBLIC_BASE_URL>/kb/search.html`
 - 按日数据：`kb/days/YYYY-MM-DD.json`
-- 每日要点：北京 **17:30** 定时档自动生成 `briefs/YYYY-MM-DD.pdf`，并推企微下载链接
+- 每日要点：北京 **17:30** 定时档自动生成 `briefs/YYYY-MM-DD.pdf`，企微直接推送 PDF 文件（无文字简述）
 
 手动：
 

@@ -24,8 +24,8 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r rss-wechat-pusher/requirements.txt
-          # 每日要点 PDF 中文字体
-          sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-cjk
+          # 每日要点 PDF 使用仓库 fonts/AlibabaPuHuiTi-Regular.ttf（无需系统字体包）
+          test -f rss-wechat-pusher/fonts/AlibabaPuHuiTi-Regular.ttf
 
       - name: Generate Yijinglab daily RSS (北京 9:30 档，每日一次)
         run: python rss-wechat-pusher/generate_yijinglab_feed.py

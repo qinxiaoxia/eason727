@@ -149,41 +149,79 @@ def _llm_daily_brief(day: str, articles: List[Dict[str, Any]]) -> Dict[str, Any]
     }
 
 
-def _find_cjk_font() -> Tuple[Optional[str], int]:
-    candidates = [
-        ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 0),
-        ("/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf", 0),
-        ("/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc", 0),
-        ("/System/Library/Fonts/PingFang.ttc", 0),
-        ("/System/Library/Fonts/STHeiti Light.ttc", 0),
-        ("/Library/Fonts/Arial Unicode.ttf", 0),
+def _find_cjk_font() -> Tuple[str, int]:
+    """
+    返回 (字体路径, ttc_subfontIndex)。
+    优先仓库内 TTF（简体），避免 Helvetica 导致中文乱码；
+    NotoSansCJK.ttc 的 index 0 常为日文，简体一般用 2。
+    """
+    home = Path.home()
+    candidates: List[Tuple[str, int]] = [
+        # 仓库自带（Actions/本地一致）
+        (str(_ROOT / "fonts" / "AlibabaPuHuiTi-Regular.ttf"), 0),
         (str(_ROOT / "fonts" / "NotoSansSC-Regular.otf"), 0),
+        (str(_ROOT / "fonts" / "NotoSansSC-Regular.ttf"), 0),
+        # 本机常见
+        (str(home / "Library/Fonts/Alibaba-PuHuiTi-Regular.ttf"), 0),
+        ("/Library/Fonts/Arial Unicode.ttf", 0),
+        # Ubuntu fonts-noto-cjk：简体通常为 subfontIndex=2
+        ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 2),
+        ("/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf", 0),
+        ("/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc", 2),
+        ("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc", 2),
+        # macOS 黑体（多 face）
+        ("/System/Library/Fonts/STHeiti Light.ttc", 1),
+        ("/System/Library/Fonts/STHeiti Light.ttc", 0),
+        ("/System/Library/Fonts/STHeiti Medium.ttc", 0),
     ]
     for path, idx in candidates:
         if Path(path).is_file():
             return path, idx
-    return None, 0
+    raise RuntimeError(
+        "未找到可用中文字体。请将 AlibabaPuHuiTi-Regular.ttf 放到 rss-wechat-pusher/fonts/，"
+        "或在 CI 安装 fonts-noto-cjk。"
+    )
+
+
+def _register_cjk_font() -> str:
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
+    if "CJK" in pdfmetrics.getRegisteredFontNames():
+        return "CJK"
+    font_path, sub = _find_cjk_font()
+    last_err = None
+    # TTC 多试几个 index，防止简体落在别的 face
+    indices = [sub] + [i for i in (0, 1, 2, 3) if i != sub]
+    if not font_path.lower().endswith(".ttc"):
+        indices = [0]
+    for idx in indices:
+        try:
+            if font_path.lower().endswith(".ttc"):
+                pdfmetrics.registerFont(TTFont("CJK", font_path, subfontIndex=idx))
+            else:
+                pdfmetrics.registerFont(TTFont("CJK", font_path))
+            # 冒烟：确保能取到常用汉字宽度
+            from reportlab.pdfbase.pdfmetrics import stringWidth
+
+            w = stringWidth("网安银行", "CJK", 10)
+            if w <= 0:
+                raise RuntimeError("stringWidth=0")
+            print(f"[每日要点] 使用字体: {font_path} (ttcIndex={idx})", flush=True)
+            return "CJK"
+        except Exception as e:
+            last_err = e
+            continue
+    raise RuntimeError(f"中文字体注册失败: {font_path} ({last_err})")
 
 
 def build_pdf_bytes(day: str, brief: Dict[str, Any], articles: List[Dict[str, Any]]) -> bytes:
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import mm
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.ttfonts import TTFont
     from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
-    font_path, sub = _find_cjk_font()
-    font_name = "Helvetica"
-    if font_path:
-        try:
-            if font_path.lower().endswith(".ttc"):
-                pdfmetrics.registerFont(TTFont("CJK", font_path, subfontIndex=sub))
-            else:
-                pdfmetrics.registerFont(TTFont("CJK", font_path))
-            font_name = "CJK"
-        except Exception as e:
-            print(f"[每日要点] 注册字体失败，回退 Helvetica: {e}", flush=True)
+    font_name = _register_cjk_font()
 
     buf = BytesIO()
     doc = SimpleDocTemplate(
@@ -319,8 +357,8 @@ def generate_daily_brief(
             result["pdf_url"] = str(local)
             print(f"[每日要点] 未配置 OSS，已写本地 {local}", flush=True)
 
-        if notify_wechat and result.get("pdf_url"):
-            _notify_wechat(day, result)
+        if notify_wechat:
+            _notify_wechat_pdf(day, pdf_bytes)
 
         return result
     finally:
@@ -328,28 +366,69 @@ def generate_daily_brief(
             conn.close()
 
 
-def _notify_wechat(day: str, result: Dict[str, Any]) -> None:
-    try:
-        from main import WECHAT_WEBHOOK, send_wechat
-    except Exception as e:
-        print(f"[每日要点] 无法加载企微发送: {e}", flush=True)
-        return
-    if not WECHAT_WEBHOOK:
-        return
-    url = result.get("pdf_url") or ""
-    n = result.get("count") or 0
-    overview = ((result.get("brief") or {}).get("overview") or "")[:120]
-    content = (
-        f"### 📋 网安情报每日要点（{day}）\n\n"
-        f"> 共 {n} 条\n\n"
-        f"{overview}\n\n"
-        f"[下载 PDF]({url})"
+def _webhook_key(webhook: str) -> str:
+    from urllib.parse import parse_qs, urlparse
+
+    return (parse_qs(urlparse(webhook or "").query).get("key") or [""])[0].strip()
+
+
+def _send_wechat_file(webhook: str, filename: str, data: bytes) -> None:
+    """企微群机器人：上传并发送文件消息（直接推 PDF，无文字简述）。"""
+    import requests
+
+    key = _webhook_key(webhook)
+    if not key:
+        raise RuntimeError("webhook 缺少 key")
+    # 企微文件上限约 20MB
+    if len(data) > 19 * 1024 * 1024:
+        raise RuntimeError(f"PDF 过大: {len(data)} bytes")
+    upload_url = (
+        f"https://qyapi.weixin.qq.com/cgi-bin/webhook/upload_media?key={key}&type=file"
     )
+    files = {"media": (filename, data, "application/pdf")}
+    r = requests.post(upload_url, files=files, timeout=60)
+    r.raise_for_status()
+    j = r.json()
+    if j.get("errcode", 0) != 0 or not j.get("media_id"):
+        raise RuntimeError(f"上传媒体失败: {j}")
+    media_id = j["media_id"]
+    r2 = requests.post(
+        webhook,
+        json={"msgtype": "file", "file": {"media_id": media_id}},
+        timeout=30,
+    )
+    r2.raise_for_status()
+    j2 = r2.json()
+    if j2.get("errcode", 0) != 0:
+        raise RuntimeError(f"发送文件失败: {j2}")
+
+
+def _notify_wechat_pdf(day: str, pdf_bytes: bytes) -> None:
+    """只推送 PDF 文件，不发文字概述。"""
     try:
-        send_wechat(WECHAT_WEBHOOK, content)
-        print("[每日要点] 已推送企微通知", flush=True)
+        from main import WECHAT_WEBHOOK, _collector_webhook_url
     except Exception as e:
-        print(f"[每日要点] 企微推送失败: {e}", flush=True)
+        print(f"[每日要点] 无法加载企微配置: {e}", flush=True)
+        return
+    filename = f"网安情报每日要点-{day}.pdf"
+    hooks = []
+    if WECHAT_WEBHOOK:
+        hooks.append(("主群", WECHAT_WEBHOOK))
+    try:
+        collector = _collector_webhook_url()
+    except Exception:
+        collector = ""
+    if collector and collector.rstrip("/") != (WECHAT_WEBHOOK or "").rstrip("/"):
+        hooks.append(("采集群", collector))
+    if not hooks:
+        print("[每日要点] 未配置 WECHAT_WEBHOOK，跳过推送", flush=True)
+        return
+    for name, hook in hooks:
+        try:
+            _send_wechat_file(hook, filename, pdf_bytes)
+            print(f"[每日要点] 已向{name}推送 PDF 文件", flush=True)
+        except Exception as e:
+            print(f"[每日要点] {name} PDF 推送失败: {e}", flush=True)
 
 
 def maybe_run_end_of_day_brief(slot, conn: sqlite3.Connection) -> None:
