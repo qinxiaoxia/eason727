@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Rackspace Spot 泄露事件使黑客得以访问客户 Kubernetes 密钥</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}
+h1{font-size:1.25rem;margin:0 0 12px;line-height:1.4}
+.meta{font-size:.9rem;color:#555;margin:0 0 20px}
+.meta a{color:#06c;word-break:break-all}
+h2{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}
+p{margin:0 0 12px;white-space:pre-wrap}
+ul{margin:0;padding-left:1.2em}
+li{margin:6px 0}
+.foot{margin-top:28px;font-size:.8rem;color:#888}
+</style>
+</head>
+<body>
+<h1>Rackspace Spot 泄露事件使黑客得以访问客户 Kubernetes 密钥</h1>
+<p class="meta">时间：2026-11-23 15:47<br/>来源：hackernews.cc网站<br/>原文：<a href="http://hackernews.cc/post/64938">http://hackernews.cc/post/64938</a></p>
+<h2>中文摘要</h2>
+<p>Rackspace 警告其 Rackspace Spot 云平台客户，黑客利用泄露的凭据在2026年11月17日UTC时间00:20至22:00期间入侵了部分平台内容。攻击者可冒充合法用户，在客户Kubernetes集群中创建pod、读取Secrets（存储密码、API密钥等敏感信息）以及列出节点和卷。Rackspace表示已撤销受影响令牌和会话、删除未授权部署、轮换密钥并加强监控。受影响客户需重新签发Spot API令牌、更换刷新令牌、更新Kubernetes配置文件并轮换集群中的凭据。公司还建议客户分析自11月17日起与数据库、容器仓库、Git仓库等相关的日志以排查数据滥用情况。此次事件导致管理控制台长时间宕机，影响客户正常操作。Platform9联合创始人Sirish Raghuram称为保护用户安全，团队决定关闭所有访问并彻底清理环境，服务于11月21日恢复。</p>
+<h2>要点</h2>
+<ul>
+<li>黑客利用泄露凭据入侵Rackspace Spot平台，时间为2026年11月17日00:20–22:00 UTC。</li>
+<li>攻击者可在客户Kubernetes集群中创建资源、读取Secrets及查看系统状态。</li>
+<li>Rackspace已撤销相关令牌、删除非法部署，并要求受影响客户轮换密钥与凭据。</li>
+<li>平台控制台因此次事件长期宕机，直至11月21日才完全恢复。</li>
+<li>Rackspace建议客户全面审查自入侵起的相关系统日志，排查潜在的数据泄露或滥用行为。</li>
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>
