@@ -74,16 +74,187 @@ def _articles_for_day(conn: sqlite3.Connection, day: str) -> List[Dict[str, Any]
                 "incident_priority": pri or "",
                 "author": author or "",
                 "published_str": published_str or "",
+                "summary_url": "",
+                "is_english": False,
             }
         )
     return rows
 
 
+# 明显中文媒体域名：这些一般不需要「中文摘要」外链
+_CN_HOST_HINTS = (
+    "weixin.qq.com",
+    "mp.weixin",
+    "4hou.com",
+    "anquanke.com",
+    "freebuf.com",
+    "secrss.com",
+    "cnvd.org.cn",
+    "cac.gov.cn",
+    "miit.gov.cn",
+    "cert.org.cn",
+    "yijinglab",
+    "aqniu.com",
+    "ithome.com",
+    "zhihu.com",
+)
+
+
+def _host_looks_chinese(link: str) -> bool:
+    from urllib.parse import urlparse
+
+    host = (urlparse(link or "").netloc or "").lower()
+    if not host:
+        return False
+    if host.endswith(".cn") or host.endswith(".com.cn"):
+        return True
+    return any(h in host for h in _CN_HOST_HINTS)
+
+
+def _lookup_existing_summary_url(link: str, published_str: str, extra_days: Optional[List[str]] = None) -> str:
+    """若推送时已上传过中文摘要 HTML，直接复用 OSS 链接（多日期兜底）。"""
+    try:
+        from main import _summary_day_slug
+        from oss_utils import object_exists, oss_enabled, oss_object_key, oss_public_url
+    except Exception:
+        return ""
+    if not oss_enabled() or not link:
+        return ""
+    day0, slug = _summary_day_slug(link, published_str or "")
+    days = [day0]
+    for d in extra_days or []:
+        if d and d not in days:
+            days.append(d)
+    for day in days:
+        key = oss_object_key(day, slug)
+        if object_exists(key):
+            return oss_public_url(key)
+    return ""
+
+
+def _batch_translate_titles(titles: List[str]) -> Dict[str, str]:
+    """一次 LLM 调用批量译标题，返回 {原文: 中文}。"""
+    from llm_utils import call_llm_with_fallback, get_llm_providers
+
+    titles = [t.strip() for t in titles if (t or "").strip()]
+    if not titles or not get_llm_providers():
+        return {}
+    # 控制单次体量
+    titles = titles[:40]
+    numbered = "\n".join(f"{i}. {t}" for i, t in enumerate(titles, 1))
+    system = (
+        "你是网安资讯标题翻译。用户给出编号的英文标题列表。"
+        "只输出 JSON 对象：{\"1\":\"中文标题\",\"2\":\"中文标题\"}，键为编号字符串。"
+        "每条译成简洁通顺的简体中文；专有名词可保留英文；不要解释。"
+    )
+    raw = call_llm_with_fallback(
+        [{"role": "user", "content": numbered}],
+        max_tokens=min(80 * len(titles) + 200, 2500),
+        system=system,
+    )
+    if not raw:
+        print("[每日要点] 批量译标题失败（LLM 无返回，可能额度不足）", flush=True)
+        return {}
+    text = raw.strip()
+    fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+    if fence:
+        text = fence.group(1)
+    else:
+        m = re.search(r"(\{.*\})", text, re.DOTALL)
+        if m:
+            text = m.group(1)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        print("[每日要点] 批量译标题 JSON 解析失败", flush=True)
+        return {}
+    out: Dict[str, str] = {}
+    for i, src in enumerate(titles, 1):
+        zh = (data.get(str(i)) or data.get(i) or "").strip()
+        if zh and re.search(r"[\u4e00-\u9fff]", zh):
+            out[src] = zh
+    print(f"[每日要点] 批量译标题成功 {len(out)}/{len(titles)}", flush=True)
+    return out
+
+
+def _enrich_articles_for_brief(
+    articles: List[Dict[str, Any]],
+    *,
+    brief_day: str = "",
+    ensure_missing_summary: bool = True,
+    ensure_limit: int = 8,
+) -> List[Dict[str, Any]]:
+    """
+    英文标题译成中文；英文稿附「原文 + 中文摘要」链接（优先复用 OSS，缺失时少量补生成）。
+    """
+    try:
+        from main import (
+            _ensure_chinese_body_summary,
+            _should_translate_title,
+        )
+    except Exception as e:
+        print(f"[每日要点] 无法加载翻译能力: {e}", flush=True)
+        return articles
+
+    need_zh_idxs = []
+    for i, a in enumerate(articles):
+        orig = (a.get("title") or "").strip()
+        a["title_orig"] = orig
+        need_title_zh = _should_translate_title(orig)
+        foreign = need_title_zh or (bool(a.get("link")) and not _host_looks_chinese(a["link"]))
+        a["is_english"] = bool(foreign)
+        a["_need_title_zh"] = need_title_zh
+        if need_title_zh:
+            need_zh_idxs.append(i)
+
+    translated = _batch_translate_titles(
+        [articles[i]["title_orig"] for i in need_zh_idxs]
+    )
+    for i in need_zh_idxs:
+        src = articles[i]["title_orig"]
+        if src in translated:
+            articles[i]["title"] = translated[src]
+
+    attempts = 0
+    for a in articles:
+        if not a.get("is_english"):
+            continue
+        extra = [brief_day] if brief_day else []
+        url = _lookup_existing_summary_url(
+            a.get("link") or "", a.get("published_str") or "", extra_days=extra
+        )
+        if (
+            not url
+            and ensure_missing_summary
+            and attempts < ensure_limit
+            and a.get("_need_title_zh")
+        ):
+            attempts += 1
+            item = {
+                "title": a.get("title_orig") or a.get("title") or "",
+                "link": a.get("link") or "",
+                "summary": a.get("summary") or "",
+                "published_str": a.get("published_str") or "",
+                "author": a.get("author") or "",
+                "source_url": "",
+            }
+            try:
+                url = _ensure_chinese_body_summary(item, a.get("title") or item["title"]) or ""
+            except Exception as e:
+                print(f"[每日要点] 补摘要失败: {e}", flush=True)
+                url = ""
+        a["summary_url"] = url or ""
+        a.pop("_need_title_zh", None)
+
+    return articles
+
+
 _BRIEF_SYSTEM = (
     "你是面向单位领导的网络安全值班编辑。根据当日资讯列表，输出 JSON（不要 markdown 围栏）："
-    '{"overview":"80-150字总览","bullets":["要点1","要点2"],"watch":["需关注1"]}'
+    '{"overview":"80-150字中文总览","bullets":["中文要点1","中文要点2"],"watch":["需关注1"]}'
     "bullets 5到8条，突出实害、金融相关、监管通报、高危漏洞；watch 0到3条。"
-    "不要编造列表中没有的事实；专有名词可保留英文。"
+    "overview、bullets、watch 必须全部使用中文撰写；专有名词、CVE、产品名可保留英文，但句子主体必须是中文。"
+    "不要编造列表中没有的事实；不要整句照抄英文标题。"
 )
 
 
@@ -127,13 +298,20 @@ def _llm_daily_brief(day: str, articles: List[Dict[str, Any]]) -> Dict[str, Any]
             "watch": [],
         }
 
+    # 控制入模长度，优先前 50 条（库查询已按类别优先级排好）
     lines = []
-    for i, a in enumerate(articles[:80], 1):
+    for i, a in enumerate(articles[:50], 1):
+        # 入模用中文标题；摘要截短，避免挤掉要点生成
+        sum_bit = (a.get("summary") or "").replace("\n", " ").strip()[:80]
         lines.append(
             f"{i}. [{a['category']}] {a['title']}"
-            + (f" | {a['summary'][:120]}" if a.get("summary") else "")
+            + (f" | {sum_bit}" if sum_bit else "")
         )
-    user = f"日期：{day}\n共 {len(articles)} 条：\n" + "\n".join(lines)
+    user = (
+        f"日期：{day}\n共 {len(articles)} 条（下列为优先摘录 {min(50, len(articles))} 条）：\n"
+        + "\n".join(lines)
+        + "\n\n请用中文输出 overview / bullets / watch。"
+    )
     raw = call_llm_with_fallback(
         [{"role": "user", "content": user}],
         max_tokens=1200,
@@ -142,9 +320,10 @@ def _llm_daily_brief(day: str, articles: List[Dict[str, Any]]) -> Dict[str, Any]
     parsed = _parse_brief_json(raw or "")
     if parsed:
         return parsed
+    print("[每日要点] 要点 LLM 失败，使用中文条目兜底", flush=True)
     return {
         "overview": f"{day} 共收录 {len(articles)} 条资讯。",
-        "bullets": [a["title"] for a in articles[:6]],
+        "bullets": [f"[{a['category']}] {a['title']}" for a in articles[:8]],
         "watch": [],
     }
 
@@ -303,7 +482,13 @@ def build_pdf_bytes(day: str, brief: Dict[str, Any], articles: List[Dict[str, An
         for a in rows[:40]:
             story.append(p(f"· {a['title']}", body_s))
             if a.get("link"):
-                story.append(p(a["link"], small_s))
+                # 英文稿：原文 + 中文摘要；中文稿：只给原文链接
+                if a.get("is_english") or a.get("summary_url"):
+                    story.append(p(f"原文：{a['link']}", small_s))
+                    if a.get("summary_url"):
+                        story.append(p(f"中文摘要：{a['summary_url']}", small_s))
+                else:
+                    story.append(p(a["link"], small_s))
 
     story.append(Spacer(1, 8))
     story.append(p("— 由 RSS 推送机器人自动生成 —", small_s))
@@ -335,6 +520,7 @@ def generate_daily_brief(
             print(f"[每日要点] {day} 无文章，跳过", flush=True)
             return {"day": day, "count": 0}
 
+        articles = _enrich_articles_for_brief(articles, brief_day=day)
         brief = _llm_daily_brief(day, articles)
         pdf_bytes = build_pdf_bytes(day, brief, articles)
 

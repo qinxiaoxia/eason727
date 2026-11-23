@@ -147,15 +147,20 @@ def call_llm_with_fallback(
                 "max_tokens": max_tokens,
                 "temperature": 0,
             }
-            timeout = 45 if purpose == "ioc" else 15
+            # 批量翻译 / 每日要点需要更长时间
+            timeout = 45 if purpose == "ioc" else (60 if max_tokens and max_tokens >= 800 else 25)
             r = requests.post(url, json=payload, headers=headers, timeout=timeout)
-            r.raise_for_status()
+            if r.status_code >= 400:
+                err = (r.text or "")[:180].replace("\n", " ")
+                print(f"[LLM] {model} HTTP {r.status_code}: {err}", flush=True)
+                continue
             data = r.json()
             content = (data.get("choices", [{}])[0].get("message", {}).get("content") or "").strip()
             if content:
                 tag = "IOC" if purpose == "ioc" else "LLM"
                 print(f"[{tag}] 使用模型: {model}", flush=True)
                 return content
-        except Exception:
+        except Exception as e:
+            print(f"[LLM] {model} 调用异常: {e}", flush=True)
             continue
     return None

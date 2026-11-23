@@ -121,13 +121,22 @@ def upload_pdf(object_key: str, pdf_bytes: bytes, *, public_read: bool = True) -
     )
 
 
+def object_exists(object_key: str) -> bool:
+    """对象是否已存在（用于复用已上传的中文摘要 HTML）。"""
+    if not oss_enabled() or not object_key:
+        return False
+    try:
+        key = object_key.lstrip("/")
+        return bool(_bucket().object_exists(key))
+    except Exception:
+        return False
+
+
 def download_bytes(object_key: str) -> bytes | None:
     """下载对象；不存在返回 None。"""
     if not oss_enabled():
         return None
     try:
-        import oss2
-
         key = object_key.lstrip("/")
         r = _bucket().get_object(key)
         return r.read()

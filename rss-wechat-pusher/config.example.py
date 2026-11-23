@@ -83,7 +83,7 @@ try:
 except json.JSONDecodeError:
     LLM_MODELS = []
 if not LLM_MODELS:
-    LLM_MODELS = ["qwen-plus"]
+    LLM_MODELS = ["qwen-plus", "qwen-turbo"]
 
 # 监管机构 IOC 提取；GitHub Secret「LLM_IOC_MODELS_JSON」示例：["qwen-plus"]
 _llm_ioc_models_json = os.getenv("LLM_IOC_MODELS_JSON")
