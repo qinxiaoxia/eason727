@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}每日要点 · 网安情报{% endblock %}
+{% block body %}
+<header class="appbar">
+  <h1>每日要点</h1>
+  <nav>
+    <a href="/">情报</a>
+    <a class="on" href="/briefs">每日要点</a>
+    <a href="/logout">退出</a>
+  </nav>
+</header>
+
+{% for it in items %}
+<article class="card">
+  <h3><a href="/briefs/{{ it.day }}" style="color:inherit;text-decoration:none">{{ it.day }}</a>
+    <span class="muted">· {{ it.count }} 条</span></h3>
+  <p class="sum">{{ it.overview }}</p>
+  <div>
+    <a class="link" href="/briefs/{{ it.day }}">查看要点</a>
+    {% if it.pdf_url %}<a class="link" href="{{ it.pdf_url }}" target="_blank" rel="noopener">下载 PDF</a>{% endif %}
+  </div>
+</article>
+{% else %}
+<p class="muted">暂无每日要点。同步 OSS briefs/ 后显示。</p>
+{% endfor %}
+{% endblock %}

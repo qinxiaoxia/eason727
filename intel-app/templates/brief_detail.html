@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{{ item.day }} 每日要点 · 网安情报{% endblock %}
+{% block body %}
+<header class="appbar">
+  <h1>{{ item.day }} 每日要点</h1>
+  <nav>
+    <a href="/briefs">返回</a>
+    <a href="/">情报</a>
+    <a href="/logout">退出</a>
+  </nav>
+</header>
+
+<article class="card">
+  <p class="muted">收录约 {{ item.count }} 条</p>
+  <h3 style="font-size:.95rem">总览</h3>
+  <p class="sum">{{ item.overview }}</p>
+
+  {% if item.bullets %}
+  <h3 style="font-size:.95rem">要点</h3>
+  <ul class="bullets">
+    {% for b in item.bullets %}<li>{{ b }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if item.watch %}
+  <h3 style="font-size:.95rem">持续关注</h3>
+  <ul class="bullets">
+    {% for w in item.watch %}<li>{{ w }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+
+  <div style="margin-top:12px">
+    {% if item.pdf_url %}<a class="link" href="{{ item.pdf_url }}" target="_blank" rel="noopener">下载 PDF</a>{% endif %}
+    {% if item.json_url %}<a class="link" href="{{ item.json_url }}" target="_blank" rel="noopener">JSON</a>{% endif %}
+  </div>
+</article>
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}情报列表 · 网安情报{% endblock %}
+{% block body %}
+<header class="appbar">
+  <h1>网安情报</h1>
+  <nav>
+    <a class="on" href="/">情报</a>
+    <a href="/briefs">每日要点</a>
+    <a href="/logout">退出</a>
+  </nav>
+</header>
+<p class="muted">共 {{ total }} 条{% if last_sync %} · 同步 {{ last_sync }}{% endif %}</p>
+
+<form class="search" method="get" action="/">
+  <input type="search" name="q" value="{{ q }}" placeholder="关键词 / CVE / IOC / 厂商"/>
+  <select name="category">
+    <option value="">全部分类</option>
+    {% for c in categories %}
+      <option value="{{ c }}" {% if c == category %}selected{% endif %}>{{ c }}</option>
+    {% endfor %}
+  </select>
+  <input type="search" name="cve" value="{{ cve }}" placeholder="CVE-…"/>
+  <button type="submit">搜索</button>
+</form>
+
+{% for it in items %}
+<article class="card">
+  <h3>
+    <span class="cat">{{ it.category or '未分类' }}</span>
+    <a href="/a/{{ it.id }}" style="color:inherit;text-decoration:none">{{ it.display_title }}</a>
+  </h3>
+  <div class="muted">{{ it.day }} · {{ it.author }} · {{ it.published_str[:16] if it.published_str else '' }}</div>
+  {% if it.cves or it.iocs or it.tags %}
+  <div class="chips">
+    {% for c in it.cves %}<span class="chip cve">{{ c }}</span>{% endfor %}
+    {% for x in it.iocs %}
+      <span class="chip ioc">{% if x is mapping %}{{ x.type }}:{{ x.value }}{% else %}{{ x }}{% endif %}</span>
+    {% endfor %}
+    {% for t in it.tags %}<span class="chip tag">{{ t }}</span>{% endfor %}
+  </div>
+  {% endif %}
+  {% if it.display_summary %}<p class="sum">{{ it.display_summary[:180] }}{% if it.display_summary|length > 180 %}…{% endif %}</p>{% endif %}
+  <div>
+    <a class="link" href="/a/{{ it.id }}">详情</a>
+    {% if it.link %}<a class="link" href="{{ it.link }}" target="_blank" rel="noopener">原文</a>{% endif %}
+    {% if it.summary_url %}<a class="link" href="{{ it.summary_url }}" target="_blank" rel="noopener">中文摘要</a>{% endif %}
+  </div>
+</article>
+{% else %}
+<p class="muted">暂无数据。若刚部署，请稍等 OSS 同步，或调用 POST /api/v1/admin/sync。</p>
+{% endfor %}
+
+{% if pages > 1 %}
+<div class="pager">
+  {% if page > 1 %}
+  <a class="btn" href="/?q={{ q }}&category={{ category }}&cve={{ cve }}&page={{ page - 1 }}">上一页</a>
+  {% endif %}
+  <span class="muted">{{ page }} / {{ pages }}</span>
+  {% if page < pages %}
+  <a class="btn" href="/?q={{ q }}&category={{ category }}&cve={{ cve }}&page={{ page + 1 }}">下一页</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

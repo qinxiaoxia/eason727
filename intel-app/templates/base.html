@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>{% block title %}网安情报{% endblock %}</title>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --card: #fff;
+      --text: #1a1a1a;
+      --muted: #667085;
+      --line: #e4e7ec;
+      --brand: #175cd3;
+      --brand-soft: #eff4ff;
+      --cve: #b54708;
+      --cve-bg: #fffaeb;
+      --ioc: #b42318;
+      --ioc-bg: #fef3f2;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .wrap { max-width: 920px; margin: 0 auto; padding: 16px 14px 48px; }
+    header.appbar {
+      display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+      justify-content: space-between; margin-bottom: 14px;
+    }
+    header.appbar h1 { font-size: 1.2rem; margin: 0; }
+    nav { display: flex; flex-wrap: wrap; gap: 8px; }
+    nav a, .btn {
+      display: inline-block; padding: 8px 12px; border-radius: 8px;
+      background: var(--card); border: 1px solid var(--line);
+      color: var(--text); text-decoration: none; font-size: .92rem;
+    }
+    nav a.on, .btn.primary {
+      background: var(--brand); border-color: var(--brand); color: #fff;
+    }
+    .muted { color: var(--muted); font-size: .85rem; }
+    .card {
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: 10px; padding: 12px 14px; margin: 0 0 10px;
+    }
+    .card h2, .card h3 { font-size: 1rem; margin: 0 0 6px; line-height: 1.4; }
+    .cat {
+      display: inline-block; background: var(--brand-soft); color: var(--brand);
+      padding: 1px 6px; border-radius: 4px; margin-right: 6px; font-size: .78rem;
+    }
+    .chips { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+    .chip {
+      font-size: .75rem; padding: 2px 7px; border-radius: 4px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .chip.tag { background: #f2f4f7; color: #344054; font-family: inherit; }
+    .chip.cve { background: var(--cve-bg); color: var(--cve); border: 1px solid #fedf89; }
+    .chip.ioc { background: var(--ioc-bg); color: var(--ioc); border: 1px solid #fecdca; word-break: break-all; }
+    .sum { font-size: .9rem; color: #344054; margin: 8px 0; white-space: pre-wrap; }
+    .search {
+      display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px;
+    }
+    .search input, .search select {
+      flex: 1; min-width: 140px; font: inherit; padding: 10px 12px;
+      border: 1px solid var(--line); border-radius: 8px; background: #fff;
+    }
+    .search button { font: inherit; padding: 10px 14px; border-radius: 8px; border: 0; background: var(--brand); color: #fff; }
+    .pager { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    a.link { color: var(--brand); word-break: break-all; margin-right: 10px; }
+    .login-box {
+      max-width: 360px; margin: 48px auto; background: var(--card);
+      border: 1px solid var(--line); border-radius: 12px; padding: 22px;
+    }
+    .login-box input {
+      width: 100%; font: inherit; padding: 10px 12px; border: 1px solid var(--line);
+      border-radius: 8px; margin: 10px 0 14px;
+    }
+    .err { color: var(--ioc); font-size: .9rem; margin: 0 0 8px; }
+    ul.bullets { padding-left: 1.2em; margin: 8px 0; }
+    ul.bullets li { margin: 6px 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    {% block body %}{% endblock %}
+  </div>
+</body>
+</html>

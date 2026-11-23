@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ item.display_title }} · 网安情报{% endblock %}
+{% block body %}
+<header class="appbar">
+  <h1>情报详情</h1>
+  <nav>
+    <a href="/">返回列表</a>
+    <a href="/briefs">每日要点</a>
+    <a href="/logout">退出</a>
+  </nav>
+</header>
+
+<article class="card">
+  <h2><span class="cat">{{ item.category or '未分类' }}</span>{{ item.display_title }}</h2>
+  <p class="muted">{{ item.day }} · {{ item.author }} · {{ item.published_str }}</p>
+
+  {% if item.cves %}
+  <div class="chips"><strong class="muted">CVE</strong>
+    {% for c in item.cves %}<span class="chip cve">{{ c }}</span>{% endfor %}
+  </div>
+  {% endif %}
+  {% if item.iocs %}
+  <div class="chips" style="margin-top:8px"><strong class="muted">IOC</strong>
+    {% for x in item.iocs %}
+      <span class="chip ioc">{% if x is mapping %}{{ x.type }}:{{ x.value }}{% else %}{{ x }}{% endif %}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if item.tags %}
+  <div class="chips" style="margin-top:8px"><strong class="muted">标签</strong>
+    {% for t in item.tags %}<span class="chip tag">{{ t }}</span>{% endfor %}
+  </div>
+  {% endif %}
+  {% if item.entities %}
+  <div class="chips" style="margin-top:8px"><strong class="muted">实体</strong>
+    {% for e in item.entities %}
+      <span class="chip tag">{% if e is mapping %}{{ e.type }}:{{ e.name }}{% else %}{{ e }}{% endif %}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <h3 style="margin-top:16px;font-size:.95rem">中文摘要</h3>
+  <p class="sum">{{ item.summary_zh or item.display_summary or '（暂无中文摘要）' }}</p>
+
+  <div style="margin-top:12px">
+    {% if item.link %}<a class="link" href="{{ item.link }}" target="_blank" rel="noopener">原文链接</a>{% endif %}
+    {% if item.summary_url %}<a class="link" href="{{ item.summary_url }}" target="_blank" rel="noopener">OSS 中文摘要页</a>{% endif %}
+  </div>
+</article>
+{% endblock %}
