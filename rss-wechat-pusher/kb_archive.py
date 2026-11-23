@@ -159,22 +159,46 @@ def _cat_file_slug(cat: str) -> str:
     return "c-" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10]
 
 
+def _as_str_list(raw) -> List[str]:
+    if isinstance(raw, str):
+        raw = _parse_json_list(raw)
+    if not isinstance(raw, list):
+        return []
+    return [str(x).strip() for x in raw if str(x).strip()]
+
+
+def _ioc_values(iocs) -> List[str]:
+    """把 iocs 规范成展示用字符串列表。"""
+    out: List[str] = []
+    if not iocs:
+        return out
+    if isinstance(iocs, str):
+        iocs = _parse_json_list(iocs)
+    if not isinstance(iocs, list):
+        return out
+    for x in iocs:
+        if isinstance(x, dict):
+            typ = (x.get("type") or "").strip()
+            val = (x.get("value") or "").strip()
+            if val:
+                out.append(f"{typ}:{val}" if typ else val)
+        elif str(x).strip():
+            out.append(str(x).strip())
+    return out[:12]
+
+
 def _catalog_to_light(catalog: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """统一成卡片用轻量字段（含标签/CVE/双链接，便于网页内查找）。"""
+    """统一成卡片用轻量字段（含标签/CVE/IOC/双链接）。"""
     light: List[Dict[str, Any]] = []
     for it in catalog:
         title = (it.get("display_title") or it.get("title_zh") or it.get("title") or "")[:200]
         summary = _strip_tags(
             it.get("display_summary") or it.get("summary_zh") or it.get("summary") or ""
         )[:220]
-        tags = it.get("tags") or []
-        if isinstance(tags, str):
-            tags = _parse_json_list(tags)
-        cves = it.get("cves") or []
-        if isinstance(cves, str):
-            cves = _parse_json_list(cves)
-        tags = [str(x) for x in tags if str(x).strip()][:8]
-        cves = [str(x).upper() for x in cves if str(x).strip()][:8]
+        tags = _as_str_list(it.get("tags"))[:8]
+        cves = [x.upper() for x in _as_str_list(it.get("cves"))][:8]
+        iocs = _ioc_values(it.get("iocs"))
+        kw_parts = [title, summary] + tags + cves + iocs
         light.append(
             {
                 "t": title,
@@ -187,8 +211,8 @@ def _catalog_to_light(catalog: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "p": (it.get("published_str") or "")[:16],
                 "tags": tags,
                 "cves": cves,
-                # 供浏览器「在网页中查找」命中
-                "kw": " ".join([title, summary] + tags + cves),
+                "iocs": iocs,
+                "kw": " ".join(kw_parts).lower(),
             }
         )
     return light
@@ -204,9 +228,23 @@ def _render_cards(items: List[Dict[str, Any]], limit: int = 500) -> str:
         cve_html = "".join(
             f'<span class="cve">{_html_esc(c)}</span>' for c in (it.get("cves") or [])
         )
-        badges = ""
-        if tag_html or cve_html:
-            badges = f'<div class="tags">{tag_html}{cve_html}</div>'
+        ioc_html = "".join(
+            f'<span class="ioc">{_html_esc(v)}</span>' for v in (it.get("iocs") or [])
+        )
+        intel_blocks = []
+        if cve_html:
+            intel_blocks.append(
+                f'<div class="intel-row"><span class="intel-label">CVE</span>{cve_html}</div>'
+            )
+        if ioc_html:
+            intel_blocks.append(
+                f'<div class="intel-row"><span class="intel-label">IOC</span>{ioc_html}</div>'
+            )
+        if tag_html:
+            intel_blocks.append(
+                f'<div class="intel-row"><span class="intel-label">标签</span>{tag_html}</div>'
+            )
+        badges = "".join(intel_blocks)
         links = (
             f'<a class="link" href="{_html_esc(it["l"])}" target="_blank" rel="noopener">原文链接</a>'
         )
@@ -215,13 +253,12 @@ def _render_cards(items: List[Dict[str, Any]], limit: int = 500) -> str:
                 f'<a class="link" href="{_html_esc(it["su"])}" target="_blank" rel="noopener">中文摘要</a>'
             )
         cards.append(
-            f'<div class="card" data-cat="{_html_esc(cat)}">'
+            f'<div class="card" data-cat="{_html_esc(cat)}" data-kw="{_html_esc(it.get("kw") or "")}">'
             f'<h3><span class="cat">{_html_esc(cat)}</span>{_html_esc(it["t"])}</h3>'
             f'<div class="meta">{_html_esc(it["d"])} · {_html_esc(it["a"])} · {_html_esc(it["p"])}</div>'
             f"{badges}"
             f'<p class="sum">{_html_esc(it["s"])}</p>'
             f'<div class="links">{links}</div>'
-            f'<span style="display:none">{_html_esc(it.get("kw") or "")}</span>'
             f"</div>"
         )
     return "\n".join(cards) or '<div class="empty">暂无归档</div>'
@@ -235,6 +272,7 @@ def _page_shell(
     *,
     filter_css: str = "",
     filter_controls: str = "",
+    extra_script: str = "",
 ) -> str:
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -248,31 +286,35 @@ margin:0;padding:20px;background:#f6f7f9;color:#1a1a1a;max-width:920px;margin-in
 h1{{font-size:1.35rem;margin:0 0 8px}}
 .sub{{color:#666;font-size:.9rem;margin-bottom:12px;line-height:1.5}}
 .nav{{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}}
-.nav a,.nav label{{display:inline-block;padding:8px 12px;border-radius:6px;background:#fff;
+.nav a{{display:inline-block;padding:8px 12px;border-radius:6px;background:#fff;
 border:1px solid #ddd;color:#1a1a1a;text-decoration:none;font-size:.92rem}}
-.nav a.on,.nav label.on{{background:#1a6fb5;color:#fff;border-color:#1a6fb5}}
-/* 纯 CSS 分类筛选：radio + 兄弟选择器，不依赖 JS（适配企微） */
-input[name=f]{{position:absolute;opacity:0;width:0;height:0}}
+.nav a.on{{background:#1a6fb5;color:#fff;border-color:#1a6fb5}}
+input[name=f]{{position:absolute;opacity:0;width:0;height:0;pointer-events:none}}
 .filters{{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}}
 .filters label{{display:inline-block;padding:8px 12px;border-radius:6px;background:#fff;
 border:1px solid #ddd;font-size:.92rem;cursor:pointer;-webkit-tap-highlight-color:transparent}}
 {filter_css}
 .card{{background:#fff;border:1px solid #e5e5e5;border-radius:8px;padding:12px 14px;margin:0 0 10px}}
+.card.hidden{{display:none!important}}
 .card h3{{font-size:1rem;margin:0 0 6px;line-height:1.4}}
 .meta{{font-size:.8rem;color:#666}}
 .sum{{font-size:.9rem;margin:8px 0 6px;white-space:pre-wrap;color:#333}}
 .cat{{display:inline-block;background:#eef5fb;color:#1a6fb5;padding:1px 6px;border-radius:4px;margin-right:6px}}
-.tags{{margin:6px 0 4px;line-height:1.6}}
-.tag,.cve{{display:inline-block;font-size:.75rem;padding:1px 6px;border-radius:4px;margin:0 4px 4px 0}}
-.tag{{background:#f0f0f0;color:#444}}
-.cve{{background:#fff4e5;color:#a15c00}}
-.links{{margin-top:6px}}
+.intel-row{{margin:6px 0 0;line-height:1.7;display:flex;flex-wrap:wrap;align-items:center;gap:4px}}
+.intel-label{{font-size:.72rem;font-weight:600;color:#666;margin-right:4px;min-width:2.2em}}
+.tag,.cve,.ioc{{display:inline-block;font-size:.75rem;padding:2px 7px;border-radius:4px;margin:0 2px 2px 0;
+font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}}
+.tag{{background:#f0f0f0;color:#444;font-family:inherit}}
+.cve{{background:#fff4e5;color:#a15c00;border:1px solid #f0d2a0}}
+.ioc{{background:#fdeceb;color:#b42318;border:1px solid #f3c1bc;word-break:break-all}}
+.links{{margin-top:8px}}
 a.link{{color:#06c;word-break:break-all;margin-right:12px}}
 .empty{{color:#888;padding:24px 0}}
-.tip{{font-size:.85rem;color:#888;margin:0 0 14px;line-height:1.45}}
-.searchbox{{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px;align-items:center}}
-.searchbox input{{flex:1;min-width:160px;font:inherit;padding:8px 10px;border:1px solid #ccc;border-radius:6px}}
-.searchbox button{{font:inherit;padding:8px 12px;border:1px solid #1a6fb5;background:#1a6fb5;color:#fff;border-radius:6px}}
+.tip{{font-size:.85rem;color:#888;margin:0 0 12px;line-height:1.45}}
+.searchbox{{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px;align-items:center}}
+.searchbox input{{flex:1;min-width:180px;font:inherit;padding:10px 12px;border:1px solid #ccc;border-radius:6px}}
+.searchbox button{{font:inherit;padding:10px 14px;border:1px solid #1a6fb5;background:#1a6fb5;color:#fff;border-radius:6px}}
+#hit{{font-size:.85rem;color:#666;margin:0 0 10px}}
 </style>
 </head>
 <body>
@@ -281,20 +323,58 @@ a.link{{color:#06c;word-break:break-all;margin-right:12px}}
 {nav_html}
 {filter_controls}
 {body_html}
+{extra_script}
 </body>
 </html>
 """
 
 
+_SEARCH_JS = """
+<script>
+(function(){
+  var q=document.getElementById('q');
+  var hit=document.getElementById('hit');
+  var list=document.getElementById('list');
+  if(!q||!list) return;
+  function apply(){
+    var needle=(q.value||'').trim().toLowerCase();
+    var cards=list.querySelectorAll('.card');
+    var n=0, shown=0;
+    for(var i=0;i<cards.length;i++){
+      var c=cards[i];
+      if(c.style.display==='none' && c.getAttribute('data-cat-hide')==='1'){
+        /* kept hidden by category css via class */
+      }
+      var kw=(c.getAttribute('data-kw')||'')+(c.innerText||'');
+      kw=kw.toLowerCase();
+      var ok=!needle || kw.indexOf(needle)>=0;
+      if(ok){ c.classList.remove('hidden'); shown++; }
+      else { c.classList.add('hidden'); }
+      n++;
+    }
+    if(hit){
+      hit.textContent = needle
+        ? ('关键词「'+q.value.trim()+'」匹配 '+shown+' / '+n+' 条（可与上方分类叠加）')
+        : ('共 '+n+' 条');
+    }
+  }
+  q.addEventListener('input', apply);
+  q.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); apply(); }});
+  var btn=document.getElementById('qbtn');
+  if(btn) btn.addEventListener('click', function(e){ e.preventDefault(); apply(); });
+  apply();
+})();
+</script>
+"""
+
+
 def _build_search_html(catalog: List[Dict[str, Any]]) -> str:
     """
-    主检索页：列表服务端渲染；分类用「链接跳转分类页」+「纯 CSS radio 筛选」，
-    不依赖企微执行 JS。关键词用浏览器原生查找（并提供可选 JS 增强）。
+    主检索页：仅一排分类（CSS radio）+ 关键词搜索框；去掉重复的分类链接栏。
     """
     light = _catalog_to_light(catalog)
 
     cats = sorted({x["c"] for x in light})
-    # 纯 CSS radio：点分类即隐藏其它卡片（企微无 JS 也能用）
     radio_inputs = ['<input type="radio" name="f" id="f-all" checked>']
     labels = ['<label for="f-all">全部</label>']
     css_parts = [
@@ -307,35 +387,38 @@ def _build_search_html(catalog: List[Dict[str, Any]]) -> str:
         css_parts.append(
             f"#{fid}:checked ~ .filters label[for={fid}]{{background:#1a6fb5;color:#fff;border-color:#1a6fb5}}"
         )
+        # 分类隐藏：不影响 .hidden（关键词）——用 :not(.hidden) 时仍隐藏非本类
         css_parts.append(
             f'#{fid}:checked ~ #list .card:not([data-cat="{_html_esc(c)}"]){{display:none!important}}'
         )
     filter_css = "\n".join(css_parts)
 
-    # 顶栏：整页跳转分类专页（比 radio 更稳）
-    nav_links = ['<a class="on" href="search.html">全部</a>']
-    for c in cats:
-        nav_links.append(f'<a href="c/{_cat_file_slug(c)}.html">{_html_esc(c)}</a>')
-    nav_html = '<div class="nav">' + "".join(nav_links) + "</div>"
+    # 不再放第二排「分类专页链接」，避免重复且第一排跳转体验差
+    nav_html = ""
 
     filter_controls = (
+        '<div class="searchbox">'
+        '<input id="q" type="search" placeholder="关键词 / CVE / IOC / 厂商…" enterkeyhint="search" autocomplete="off"/>'
+        '<button type="button" id="qbtn">搜索</button>'
+        "</div>"
+        '<p id="hit"></p>'
         "".join(radio_inputs)
         + '<div class="filters">'
         + "".join(labels)
         + "</div>"
-        + '<p class="tip">推荐：点上方蓝色链接进入「分类专页」。'
-        + "本页下方标签也可即时筛选。"
-        + "搜关键词/CVE：用系统「在网页中查找」（标题、摘要、标签、CVE 均可命中）。</p>"
+        + '<p class="tip">上方输入关键词可筛标题/摘要/CVE/IOC；下方点分类可叠加筛选。'
+        + "若在企微内搜索无效，请用右上角「浏览器打开」。</p>"
     )
 
     body = f'<div id="list">\n{_render_cards(light, 500)}\n</div>'
     return _page_shell(
         "网安情报知识库",
-        f"已归档 {len(light)} 条。分类请点链接或标签（不依赖脚本）。",
+        f"已归档 {len(light)} 条。支持关键词与分类筛选。",
         nav_html,
         body,
         filter_css=filter_css,
         filter_controls=filter_controls,
+        extra_script=_SEARCH_JS,
     )
 
 
@@ -374,6 +457,48 @@ def ensure_search_page(catalog: Optional[List[Dict[str, Any]]] = None) -> Option
     return url
 
 
+def _backfill_zh_titles(conn: sqlite3.Connection, items: List[Dict[str, Any]], *, limit: int = 40) -> int:
+    """
+    对仍缺 title_zh 的英文标题批量翻译并写回库，再刷新 items 内存字段。
+    """
+    need = []
+    for it in items:
+        if (it.get("title_zh") or "").strip():
+            continue
+        title = (it.get("title") or "").strip()
+        if not title:
+            continue
+        try:
+            from main import _should_translate_title
+        except Exception:
+            break
+        if _should_translate_title(title):
+            need.append(it)
+        if len(need) >= limit:
+            break
+    if not need:
+        return 0
+    try:
+        from daily_brief import _batch_translate_titles
+        from intel_store import update_article_intel
+    except Exception as e:
+        print(f"[知识库] 标题补译不可用: {e}", flush=True)
+        return 0
+    mapping = _batch_translate_titles([it["title"] for it in need])
+    n = 0
+    for it in need:
+        zh = mapping.get(it["title"] or "")
+        if not zh:
+            continue
+        if update_article_intel(conn, it["link"], title_zh=zh):
+            it["title_zh"] = zh
+            it["display_title"] = zh
+            n += 1
+    if n:
+        print(f"[知识库] 已补译英文标题 {n} 条", flush=True)
+    return n
+
+
 def sync_knowledge_base(conn: sqlite3.Connection) -> Dict[str, Any]:
     """
     全量按日写 OSS，并刷新 catalog / 日期索引 / 搜索页。
@@ -388,6 +513,12 @@ def sync_knowledge_base(conn: sqlite3.Connection) -> Dict[str, Any]:
         print("[知识库] articles 为空，跳过", flush=True)
         return {}
 
+    # 归档前尽量把英文标题译成中文（展示用）
+    try:
+        _backfill_zh_titles(conn, items)
+    except Exception as e:
+        print(f"[知识库] 标题补译跳过: {e}", flush=True)
+
     prefix = kb_prefix()
     by_day = _group_by_day(items)
     days_sorted = sorted(by_day.keys(), reverse=True)
@@ -400,20 +531,21 @@ def sync_knowledge_base(conn: sqlite3.Connection) -> Dict[str, Any]:
 
     upload_json(f"{prefix}days/index.json", {"days": days_sorted, "updated_at": datetime.utcnow().isoformat() + "Z"})
 
-    # catalog：按时间新到旧截断；含中文摘要/标签/CVE/双链接
+    # catalog：按时间新到旧截断；含中文摘要/标签/CVE/IOC/双链接
     catalog = []
     for it in items[:_CATALOG_LIMIT]:
         catalog.append(
             {
                 "title": it["title"],
                 "title_zh": it.get("title_zh") or "",
-                "display_title": it.get("display_title") or it["title"],
+                "display_title": it.get("display_title") or it.get("title_zh") or it["title"],
                 "summary": (it["summary"] or "")[:400],
                 "summary_zh": (it.get("summary_zh") or "")[:800],
-                "display_summary": (it.get("display_summary") or it["summary"] or "")[:400],
+                "display_summary": (it.get("display_summary") or it.get("summary_zh") or it["summary"] or "")[:400],
                 "summary_url": it.get("summary_url") or "",
                 "tags": it.get("tags") or [],
                 "cves": it.get("cves") or [],
+                "iocs": it.get("iocs") or [],
                 "category": it["category"],
                 "author": it["author"],
                 "link": it["link"],
@@ -423,7 +555,7 @@ def sync_knowledge_base(conn: sqlite3.Connection) -> Dict[str, Any]:
             }
         )
     catalog_url = upload_json(f"{prefix}catalog.json", catalog)
-    # 搜索页内嵌 catalog，手机端无需再请求 json
+    # 搜索页内嵌列表，手机端无需再请求 json
     search_url = ensure_search_page(catalog)
 
     print(
