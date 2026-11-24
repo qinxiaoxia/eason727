@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Linux补丁可能需数周才能推出，OpenAI与思科联手打造Shirudo以解燃眉之急</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}
+h1{font-size:1.25rem;margin:0 0 12px;line-height:1.4}
+.meta{font-size:.9rem;color:#555;margin:0 0 20px}
+.meta a{color:#06c;word-break:break-all}
+h2{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}
+p{margin:0 0 12px;white-space:pre-wrap}
+ul{margin:0;padding-left:1.2em}
+li{margin:6px 0}
+.foot{margin-top:28px;font-size:.8rem;color:#888}
+</style>
+</head>
+<body>
+<h1>Linux补丁可能需数周才能推出，OpenAI与思科联手打造Shirudo以解燃眉之急</h1>
+<p class="meta">时间：2026-11-24 14:00<br/>来源：helpnetsecurity.com网站<br/>原文：<a href="https://www.helpnetsecurity.com/2026/11/24/cisco-openai-shirudo/">https://www.helpnetsecurity.com/2026/11/24/cisco-openai-shirudo/</a></p>
+<h2>中文摘要</h2>
+<p>OpenAI and Cisco联合推出开源工具Shirudo，旨在为Linux系统在等待补丁期间提供临时保护。该工具利用eBPF技术，在不重启服务的情况下运行“盾牌”程序，通过阻止漏洞利用行为来防御攻击，同时确保正常流量不受影响。每个盾牌都经过加密签名验证，并由可信平台模块（TPM）记录加载状态以供审计。测试显示，Shirudo能够有效拦截Java4Shell攻击并保持Elasticsearch服务运行。项目强调开放协作，希望提升整体安全响应效率。</p>
+<h2>要点</h2>
+<ul>
+<li>Shirudo是OpenAI与Cisco合作推出的开源工具，用于在Linux系统中实施无需重启的临时防护。</li>
+<li>它基于eBPF技术，使用被称为“盾牌”的小程序阻止特定漏洞行为，保障合法请求继续通行。</li>
+<li>盾牌程序需经数字签名验证，其加载和移除情况会被TPM芯片记录，便于后续审查。</li>
+<li>实测案例表明，Shirudo成功防御了Java4Shell攻击，并维持了Elasticsearch服务的正常运转。</li>
+<li>该项目强调社区共享，目标是让各团队能共同改进安全防护方法，无需从零开始。</li>
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>
