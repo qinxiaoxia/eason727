@@ -149,14 +149,30 @@ def _lookup_existing_summary_url(link: str, published_str: str, extra_days: Opti
 
 
 def _batch_translate_titles(titles: List[str]) -> Dict[str, str]:
-    """一次 LLM 调用批量译标题，返回 {原文: 中文}。"""
-    from llm_utils import call_llm_with_fallback, get_llm_providers
+    """批量译标题，返回 {原文: 中文}。Qwen-MT 逐条译；其它模型一次 JSON。"""
+    from llm_utils import call_llm_with_fallback, get_llm_providers, is_mt_model
 
     titles = [t.strip() for t in titles if (t or "").strip()]
-    if not titles or not get_llm_providers():
+    providers = get_llm_providers("translate")
+    if not titles or not providers:
         return {}
-    # 控制单次体量
     titles = titles[:40]
+    use_mt = any(is_mt_model(m) for _, _, m in providers)
+
+    if use_mt:
+        out: Dict[str, str] = {}
+        for src in titles:
+            raw = call_llm_with_fallback(
+                [{"role": "user", "content": src}],
+                max_tokens=256,
+                purpose="translate",
+            )
+            zh = (raw or "").strip()
+            if zh and re.search(r"[\u4e00-\u9fff]", zh):
+                out[src] = zh
+        print(f"[每日要点] 批量译标题成功 {len(out)}/{len(titles)} (mt)", flush=True)
+        return out
+
     numbered = "\n".join(f"{i}. {t}" for i, t in enumerate(titles, 1))
     system = (
         "你是网安资讯标题翻译。用户给出编号的英文标题列表。"
@@ -167,6 +183,7 @@ def _batch_translate_titles(titles: List[str]) -> Dict[str, str]:
         [{"role": "user", "content": numbered}],
         max_tokens=min(80 * len(titles) + 200, 2500),
         system=system,
+        purpose="translate",
     )
     if not raw:
         print("[每日要点] 批量译标题失败（LLM 无返回，可能额度不足）", flush=True)
@@ -184,7 +201,7 @@ def _batch_translate_titles(titles: List[str]) -> Dict[str, str]:
     except json.JSONDecodeError:
         print("[每日要点] 批量译标题 JSON 解析失败", flush=True)
         return {}
-    out: Dict[str, str] = {}
+    out = {}
     for i, src in enumerate(titles, 1):
         zh = (data.get(str(i)) or data.get(i) or "").strip()
         if zh and re.search(r"[\u4e00-\u9fff]", zh):

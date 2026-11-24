@@ -87,7 +87,8 @@ FreeBuf 会对部分**云主机出口 IP**返回 `405 Not Allowed`。脚本已�
 |------|-----|
 | `LLM_API_KEY` | 通义千问 / DeepSeek 等 API Key |
 | `LLM_BASE_URL` | 如 `https://dashscope.aliyuncs.com/compatible-mode/v1`（通义） |
-| **`LLM_MODELS_JSON`** | **推荐**：多模型回退，一行 JSON 数组（与 `config.example.py` 中默认列表一致，如多个 `qwen-plus-*` 快照 + `qwen-plus-latest` 等；额度用尽或失败时自动换下一个） |
+| **`LLM_MODELS_JSON`** | **推荐**：分类/摘要等多模型回退，如 `["qwen-plus","qwen-turbo"]` |
+| **`LLM_TRANSLATE_MODELS_JSON`** | **标题翻译专用**，推荐 `["qwen-mt-flash"]`（通义翻译模型；勿把 mt 填进上面的 MODELS，分类会坏） |
 | `LLM_MODEL` | 单模型时用，如 `qwen-plus`（与 `LLM_MODELS_JSON` 二选一即可；都配时优先 JSON 列表） |
 | `WEWE_RSS_URL` | 你的 WeWe RSS 地址，如 `https://eason727.zeabur.app` |
 | `FREEBUF_RSS_MIRROR` | 可选。FreeBuf 官方 feed 在 Actions 上 405 时，填镜像 RSS 全文 URL |

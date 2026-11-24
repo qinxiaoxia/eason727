@@ -85,6 +85,15 @@ except json.JSONDecodeError:
 if not LLM_MODELS:
     LLM_MODELS = ["qwen-plus", "qwen-turbo"]
 
+# 标题翻译专用（推荐 qwen-mt-flash）；GitHub Secret「LLM_TRANSLATE_MODELS_JSON」：["qwen-mt-flash"]
+_llm_translate_models_json = os.getenv("LLM_TRANSLATE_MODELS_JSON")
+try:
+    LLM_TRANSLATE_MODELS = json.loads(_llm_translate_models_json) if _llm_translate_models_json else []
+except json.JSONDecodeError:
+    LLM_TRANSLATE_MODELS = []
+if not LLM_TRANSLATE_MODELS:
+    LLM_TRANSLATE_MODELS = ["qwen-mt-flash"]
+
 # 监管机构 IOC 提取；GitHub Secret「LLM_IOC_MODELS_JSON」示例：["qwen-plus"]
 _llm_ioc_models_json = os.getenv("LLM_IOC_MODELS_JSON")
 try:

@@ -1265,10 +1265,12 @@ def _translate_to_chinese(title):
         _translate_cache[title] = (title, False)
         return title, False
 
+    # qwen-mt-*：user 内容必须是待译原文；通用聊天模型仍带 system 提示
     raw = call_llm_with_fallback(
-        [{"role": "user", "content": f"请翻译为简体中文标题（仅此一行）：\n{title}"}],
+        [{"role": "user", "content": title}],
         max_tokens=256,
         system=_TRANSLATION_SYSTEM,
+        purpose="translate",
     )
     if not raw:
         _translate_cache[title] = (title, False)
