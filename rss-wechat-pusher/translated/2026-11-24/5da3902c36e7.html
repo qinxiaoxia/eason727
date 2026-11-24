@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>VMware vCenter Server 高危漏洞可未授权创建管理员</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}
+h1{font-size:1.25rem;margin:0 0 12px;line-height:1.4}
+.meta{font-size:.9rem;color:#555;margin:0 0 20px}
+.meta a{color:#06c;word-break:break-all}
+h2{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}
+p{margin:0 0 12px;white-space:pre-wrap}
+ul{margin:0;padding-left:1.2em}
+li{margin:6px 0}
+.foot{margin-top:28px;font-size:.8rem;color:#888}
+</style>
+</head>
+<body>
+<h1>VMware vCenter Server 高危漏洞可未授权创建管理员</h1>
+<p class="meta">时间：2026-11-24 18:12<br/>来源：微步在线研究响应中心公众号<br/>原文：<a href="https://mp.weixin.qq.com/s/jkjqyaXmwlAi2LBNhnoAeA">https://mp.weixin.qq.com/s/jkjqyaXmwlAi2LBNhnoAeA</a></p>
+<h2>中文摘要</h2>
+<p>VMware vCenter Server 被曝出一个高危未授权漏洞（微步编号XVE-2026-62902，CVE编号CVE-2026-123903），风险等级为高，分数9.8。该漏洞由微步XGPT发现并报送VMware官方。攻击者无需任何权限即可利用此漏洞，通过访问vCenter内置的vmdir目录服务所使用的389端口，在特定认证流程中绕过身份验证，创建管理员账号并完全接管vCenter服务器。该漏洞与近期发布的CVE-2026-123890不同。受影响版本包括vCenter Server 7.x、8.0U3m以下版本、9.0.x.x至9.0.2.0300及9.1.x.x至9.1.2；同时影响VMware Cloud Foundation和Telco相关平台的多个版本。目前已有修复补丁发布，建议所有受影响用户立即更新。</p>
+<h2>要点</h2>
+<ul>
+<li>漏洞类型：身份鉴别错误</li>
+<li>利用条件：可远程、无需权限、无需受害者配合、无需绕过安全机制</li>
+<li>影响产品：VMware vCenter Server及其关联产品</li>
+<li>风险等级：高（CVSS评分9.8）</li>
+<li>已提供修复补丁，需尽快升级</li>
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>
