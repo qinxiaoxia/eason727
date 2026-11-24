@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>黑客利用 N-able MailAssure 漏洞，AI 智能体利用 MONAI Label 零日漏洞</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}
+h1{font-size:1.25rem;margin:0 0 12px;line-height:1.4}
+.meta{font-size:.9rem;color:#555;margin:0 0 20px}
+.meta a{color:#06c;word-break:break-all}
+h2{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}
+p{margin:0 0 12px;white-space:pre-wrap}
+ul{margin:0;padding-left:1.2em}
+li{margin:6px 0}
+.foot{margin-top:28px;font-size:.8rem;color:#888}
+</style>
+</head>
+<body>
+<h1>黑客利用 N-able MailAssure 漏洞，AI 智能体利用 MONAI Label 零日漏洞</h1>
+<p class="meta">时间：2026-11-24 15:31<br/>来源：hackernews.cc网站<br/>原文：<a href="http://hackernews.cc/post/64945">http://hackernews.cc/post/64945</a></p>
+<h2>中文摘要</h2>
+<p>美国网络安全和基础设施安全局（CISA）已将两个严重漏洞加入其已知被利用漏洞（KEV）目录。CVE-2026-134624（CVSS评分9.3）存在于N-able MailAssure中，是一个服务器端请求伪造（SSRF）漏洞，允许已认证用户访问内部系统；该漏洞曾导致部分服务中断，但N-able表示影响有限且已修复。另一个漏洞CVE-2026-133968（CVSS评分9.8）存在于MONAI Label中，为路径遍历漏洞，可使未认证攻击者实现远程代码执行。此次利用该漏洞的攻击与AI智能体有关，攻击者使用CAIRN等AI框架，在极少人工干预下自动规划攻击行为，包括对大学GPU服务器和医疗AI应用系统的入侵，并建立持久访问以窃取资金。这些活动是更大规模攻击集群的一部分，涉及ARTEX、AntiFox等AI渗透框架，已波及多家企业如John Deere和SharkNinja。AWS和其他安全机构也报告了相关AI驱动攻击活动，主要针对金融数据和AI基础设施，建议相关机构在2026年11月26日前完成漏洞修补。</p>
+<h2>要点</h2>
+<ul>
+<li>CISA将N-able MailAssure和MONAI Label的两个高危漏洞列入KEV目录，分别对应CVE-2026-134624（CVSS 9.3）和CVE-2026-133968（CVSS 9.8）。</li>
+<li>CVE-2026-134624允许已认证用户进行SSRF攻击，曾引发Mail Assure服务中断，但N-able称影响仅限单台服务器。</li>
+<li>CVE-2026-133968被用于AI智能体攻击，攻击者利用CAIRN等AI工具自动化实施路径遍历并植入反向shell。</li>
+<li>相关攻击活动属于以ARTEX为核心的AI驱动攻击集群，已入侵超过100家企业，目标包括电商、支付系统和金融机构。</li>
+<li>AWS、Previdian等机构监测到大量与ARTEX相关的攻击行为，涵盖多种知名漏洞利用，呼吁尽快修补相关漏洞。</li>
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>
