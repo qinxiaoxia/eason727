@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>FineReport FVS模板未授权RCE漏洞预警</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}
+h1{font-size:1.25rem;margin:0 0 12px;line-height:1.4}
+.meta{font-size:.9rem;color:#555;margin:0 0 20px}
+.meta a{color:#06c;word-break:break-all}
+h2{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}
+p{margin:0 0 12px;white-space:pre-wrap}
+ul{margin:0;padding-left:1.2em}
+li{margin:6px 0}
+.foot{margin-top:28px;font-size:.8rem;color:#888}
+</style>
+</head>
+<body>
+<h1>FineReport FVS模板未授权RCE漏洞预警</h1>
+<p class="meta">时间：2026-11-23 20:10<br/>来源：微步在线研究响应中心公众号<br/>原文：<a href="https://mp.weixin.qq.com/s/ZFKLm2hh341Ae2EiE36R4w">https://mp.weixin.qq.com/s/ZFKLm2hh341Ae2EiE36R4w</a></p>
+<h2>中文摘要</h2>
+<p>微步情报局发现并成功复现了帆软FineReport FVS模板未授权RCE漏洞（编号XVE-2026-61443）。该漏洞存在于FineVis模板的导入接口，攻击者无需任何权限即可通过特制模板包将恶意代码注入应用类加载路径，并利用无需认证的文件访问接口执行任意系统命令。此漏洞允许远程无感知利用，风险等级为高（9.8分），影响版本包括FineReport &lt;11.5.16及FineVis插件 &lt;4.15.0。官方已发布修复版本，建议受影响用户尽快升级。</p>
+<h2>要点</h2>
+<ul>
+<li>漏洞类型：未授权远程代码执行（RCE）</li>
+<li>影响范围：FineReport报表软件&lt;11.5.16、FineVis插件&lt;4.15.0</li>
+<li>攻击条件：无需登录或配合，可完全远程触发</li>
+<li>危害程度：高风险（CVSS评分9.8）</li>
+<li>修复方案：升级至官方发布的安全版本</li>
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>

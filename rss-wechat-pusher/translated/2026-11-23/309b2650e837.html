@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>GL.iNet云服务遭入侵，影响路由器与KVM设备，还发现旧版后门程序</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}
+h1{font-size:1.25rem;margin:0 0 12px;line-height:1.4}
+.meta{font-size:.9rem;color:#555;margin:0 0 20px}
+.meta a{color:#06c;word-break:break-all}
+h2{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}
+p{margin:0 0 12px;white-space:pre-wrap}
+ul{margin:0;padding-left:1.2em}
+li{margin:6px 0}
+.foot{margin-top:28px;font-size:.8rem;color:#888}
+</style>
+</head>
+<body>
+<h1>GL.iNet云服务遭入侵，影响路由器与KVM设备，还发现旧版后门程序</h1>
+<p class="meta">时间：2026-11-23 23:05<br/>来源：helpnetsecurity.com网站<br/>原文：<a href="https://www.helpnetsecurity.com/2026/11/23/gl-inet-cloud-compromise-malware-backdoors/">https://www.helpnetsecurity.com/2026/11/23/gl-inet-cloud-compromise-malware-backdoors/</a></p>
+<h2>中文摘要</h2>
+<p>GL.iNet 的云服务 GoodCloud 在 2026 年 11 月 20 日被攻破，攻击者利用此漏洞在连接的路由器和 KVM 设备上安装了 malware。该漏洞已被修复，但已感染的设备仍需手动清除恶意软件。GL.i.Net 建议用户更新到最新的安全固件，并检查特定的指示器（如一个名为 crond -i /tmp/.log 的进程），并提供了社区脚本以辅助检测。此外，合作伙伴 RemoteToHome Consulting (RTH) 发现部分设备上存在更早时期植入的后门，可能与本次事件有关。RTH 对其管理的 199 台路由器进行了检查，发现其中 166 台受到影响，包括运行新攻击命令、旧后门或两者兼有的情况。由于攻击者获得了 root 权限，所有存储在设备上的敏感信息都可能已被窃取，仅清理本地设备无法根除风险，必须从攻击者的服务器端移除访问权限。</p>
+<h2>要点</h2>
+<ul>
+<li>GL.iNet 的云服务 GoodCloud 被攻破，攻击者借此在路由器和 KVM 上安装 malware。</li>
+<li>公司已修复漏洞，但建议受影响用户通过更新固件等方式手动清除本地恶意软件。</li>
+<li>RemoteToHome Consulting 发现大量 GL.iNet 设备存在 2025 年遗留的后门程序。</li>
+<li>由于攻击者获得了 root 权限，设备本地的安全措施不足以消除全部风险。</li>
+<li>攻击者可获取设备上存储的所有敏感信息，包括密码和配置文件。</li>
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>

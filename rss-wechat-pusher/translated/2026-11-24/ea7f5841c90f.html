@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Windows远程访问API本地提权漏洞CVE-2026-119853通告</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}
+h1{font-size:1.25rem;margin:0 0 12px;line-height:1.4}
+.meta{font-size:.9rem;color:#555;margin:0 0 20px}
+.meta a{color:#06c;word-break:break-all}
+h2{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}
+p{margin:0 0 12px;white-space:pre-wrap}
+ul{margin:0;padding-left:1.2em}
+li{margin:6px 0}
+.foot{margin-top:28px;font-size:.8rem;color:#888}
+</style>
+</head>
+<body>
+<h1>Windows远程访问API本地提权漏洞CVE-2026-119853通告</h1>
+<p class="meta">时间：2026-11-24 11:23<br/>来源：奇安信 CERT公众号<br/>原文：<a href="https://mp.weixin.qq.com/s/reNfMXK_EePqRNnq1mGitg">https://mp.weixin.qq.com/s/reNfMXK_EePqRNnq1mGitg</a></p>
+<h2>中文摘要</h2>
+<p>奇安信CERT监测到微软Windows系统中一个高危本地权限提升漏洞（CVE-2026-119853），CVSS评分为7.8。该漏洞源于Windows远程访问API在加载自定义拨号DLL时，对搜索路径处理不当，导致攻击者可将恶意DLL放置于不受信任的目录并被SYSTEM权限进程加载执行，从而实现权限提升，获得完整系统控制权。目前POC、技术细节和利用代码均已公开，但未发现实际在野利用。受影响的版本包括多个Windows 10/11及Windows Server版本，建议用户尽快通过官方更新或奇安信天擎等工具进行补丁修复。</p>
+<h2>要点</h2>
+<ul>
+<li>漏洞编号：CVE-2026-119853，CVSS评分7.8，属于高危权限提升漏洞。</li>
+<li>攻击者可通过放置恶意DLL，利用Windows Remote Access API加载机制，在低权限账户下提权至SYSTEM级别。</li>
+<li>影响范围广泛，涵盖Windows 10、11以及Windows Server 2016至2025等多个版本。</li>
+<li>已公开PoC和技术细节，尚未发现实际在野利用案例。</li>
+<li>推荐通过Windows自动更新或奇安信天擎等工具及时安装官方安全补丁进行防护。</li>
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>
