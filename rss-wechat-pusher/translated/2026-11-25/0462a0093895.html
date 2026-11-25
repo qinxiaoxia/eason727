@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>恶意机器人在8秒内利用Docker镜像中泄露的AWS密钥发起攻击</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}
+h1{font-size:1.25rem;margin:0 0 12px;line-height:1.4}
+.meta{font-size:.9rem;color:#555;margin:0 0 20px}
+.meta a{color:#06c;word-break:break-all}
+h2{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}
+p{margin:0 0 12px;white-space:pre-wrap}
+ul{margin:0;padding-left:1.2em}
+li{margin:6px 0}
+.foot{margin-top:28px;font-size:.8rem;color:#888}
+</style>
+</head>
+<body>
+<h1>恶意机器人在8秒内利用Docker镜像中泄露的AWS密钥发起攻击</h1>
+<p class="meta">时间：2026-11-25 19:22<br/>来源：helpnetsecurity.com网站<br/>原文：<a href="https://www.helpnetsecurity.com/2026/11/25/docker-aws-key-exposure-bots/">https://www.helpnetsecurity.com/2026/11/25/docker-aws-key-exposure-bots/</a></p>
+<h2>中文摘要</h2>
+<p>一项由Stony Brook University研究人员Billy Tsouvalas和Nick Nikiforakis进行的研究发现，攻击者使用的“ContainerBots”可以在Docker镜像发布后不到8秒内利用其中泄露的AWS密钥。他们在公共容器注册表中投放了300个带有伪造API密钥的镜像，结果显示，这些密钥在几分钟内就被大量请求耗尽，包括OpenAI和Anthropic的密钥。研究指出，扫描器会优先测试密钥有效性，并推测存在一个将有效密钥转售给最终使用者的地下市场。此外，研究人员发现包含敏感名称的镜像会吸引更多下载。他们建议注册表运营商在推送时扫描已知密钥格式并限制公开的新镜像列表端点。</p>
+<h2>要点</h2>
+<ul>
+<li>攻击者Bot可在8秒内利用Docker镜像中的泄露密钥，93%的AWS密钥在5分钟内被使用。</li>
+<li>研究人员通过部署带有伪造密钥的镜像，观察到大量无效请求，证实了名为“ContainerBots”的自动化扫描活动的存在。</li>
+<li>扫描器不会运行整个镜像，而是仅下载可能包含凭证的层并快速搜索密钥字符串，随后立即测试其有效性。</li>
+<li>部分密钥（如OpenAI）经历“验证-等待-利用”周期，表明存在密钥转售行为；而权限受限的密钥则未被用于消耗计算资源。</li>
+<li>研究人员建议注册表运营商增加推送前的密钥扫描功能，并对公开的新镜像列表端点实施认证或速率限制以减少暴露风险。</li>
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>

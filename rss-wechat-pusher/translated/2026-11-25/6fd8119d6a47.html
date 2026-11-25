@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>GT13：AI辅助黑客通过Check Point服务器攻击22个组织</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}
+h1{font-size:1.25rem;margin:0 0 12px;line-height:1.4}
+.meta{font-size:.9rem;color:#555;margin:0 0 20px}
+.meta a{color:#06c;word-break:break-all}
+h2{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}
+p{margin:0 0 12px;white-space:pre-wrap}
+ul{margin:0;padding-left:1.2em}
+li{margin:6px 0}
+.foot{margin-top:28px;font-size:.8rem;color:#888}
+</style>
+</head>
+<body>
+<h1>GT13：AI辅助黑客通过Check Point服务器攻击22个组织</h1>
+<p class="meta">时间：2026-11-25 18:47<br/>来源：securityaffairs.co网站<br/>原文：<a href="https://securityaffairs.com/203946/hacking/gt13-ai-assisted-hackers-target-22-organizations-through-check-point-servers.html">https://securityaffairs.com/203946/hacking/gt13-ai-assisted-hackers-target-22-organizations-through-check-point-servers.html</a></p>
+<h2>中文摘要</h2>
+<p>GreyNoise追踪到一个代号为GT13的未归因网络攻击活动，该活动针对Check Point安全管理系统，影响了全球22个不同国家和行业的组织。此次攻击可能仍在进行中，其特征是使用AI辅助或自动化工具。攻击者利用Rejetto HFS服务器上的CVE-2026-61500漏洞获取初始访问权，并通过破解随机数生成器伪造管理员会话Cookie实现无密码登录。随后，他们安装了HFS中间件、SSH密钥和名为“ZULT”的Linux植入物，但后者下载失败。攻击者最终成功在Check Point设备上执行了多个管理任务，包括复制防火墙数据库、卸载安全策略以及创建新的证书，可能导致防火墙失效。整个活动中，攻击者还对Citrix NetScaler、Ivanti Connect Secure、VMware vCenter等其他系统进行了探测和攻击。他们使用了多种Python脚本工具（如Nmap, Chisel, Impacket）进行横向移动和内部侦察，并通过临时IP地址和VPN节点隐藏行踪。</p>
+<h2>要点</h2>
+<ul>
+<li>攻击活动代号GT13，由GreyNoise追踪，影响至少22个全球组织。</li>
+<li>攻击者利用Rejetto HFS服务器的CVE-2026-61500漏洞，通过破解随机数生成器伪造管理员Cookie以获取初始访问权。</li>
+<li>攻击者部署了Chisel作为反向代理，并尝试部署“ZULT”植入物但失败，转而通过SSH连接建立持久化后门。</li>
+<li>攻击者利用已有的后门，在Check Point设备上执行了超过100项管理任务，包括备份数据库、卸载安全策略并创建新证书，可能导致防火墙被关闭。</li>
+<li>攻击者同时对Citrix、Ivanti、VMware、Exchange等多个平台的漏洞进行探测和攻击，展现了高度自动化的多阶段攻击行为。</li>
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>

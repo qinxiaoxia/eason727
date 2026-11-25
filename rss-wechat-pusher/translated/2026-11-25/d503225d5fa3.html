@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Anthropic希望在不保留用户数据的情况下监测AI异常行为</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}
+h1{font-size:1.25rem;margin:0 0 12px;line-height:1.4}
+.meta{font-size:.9rem;color:#555;margin:0 0 20px}
+.meta a{color:#06c;word-break:break-all}
+h2{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}
+p{margin:0 0 12px;white-space:pre-wrap}
+ul{margin:0;padding-left:1.2em}
+li{margin:6px 0}
+.foot{margin-top:28px;font-size:.8rem;color:#888}
+</style>
+</head>
+<body>
+<h1>Anthropic希望在不保留用户数据的情况下监测AI异常行为</h1>
+<p class="meta">时间：2026-11-25 17:20<br/>来源：helpnetsecurity.com网站<br/>原文：<a href="https://www.helpnetsecurity.com/2026/11/25/anthropic-enterprise-frontier-safeguards-public-beta/">https://www.helpnetsecurity.com/2026/11/25/anthropic-enterprise-frontier-safeguards-public-beta/</a></p>
+<h2>中文摘要</h2>
+<p>Anthropic推出了面向企业的Frontier Safeguards (EFS)公共测试版，旨在检测跨多次交互的潜在有害AI行为，同时实现零数据保留（Zero Data Retention, ZDR）。该系统通过自动化安全机制分析存储在客户云环境中的对话，并标记可疑行为供安全团队调查。与传统ZDR仅检查单个请求不同，EFS能识别复杂攻击中分散在多个请求间的恶意模式，例如AI代理间协作窃取凭证。当检测到威胁时，系统会生成不包含提示或响应内容的安全案例，供SIEM系统集成和审查。此方案确保敏感数据保留在客户控制的环境中并使用其加密密钥，Anthropic及云服务商均无法访问或用于模型训练。</p>
+<h2>要点</h2>
+<ul>
+<li>EFS可在不保留用户数据的情况下检测多步AI攻击行为</li>
+<li>系统通过分析客户云环境中的对话识别跨请求的恶意模式</li>
+<li>生成的安全案例不含敏感信息，可接入SIEM系统进行审计</li>
+<li>所有数据均存储于客户可控的云环境，Anthropic及云商无权访问</li>
+<li>已支持Claude Platform、AWS、Google Cloud，Microsoft Foundry即将上线</li>
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>
