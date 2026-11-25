@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>gputaskman：开源GPU任务管理器</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}
+h1{font-size:1.25rem;margin:0 0 12px;line-height:1.4}
+.meta{font-size:.9rem;color:#555;margin:0 0 20px}
+.meta a{color:#06c;word-break:break-all}
+h2{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}
+p{margin:0 0 12px;white-space:pre-wrap}
+ul{margin:0;padding-left:1.2em}
+li{margin:6px 0}
+.foot{margin-top:28px;font-size:.8rem;color:#888}
+</style>
+</head>
+<body>
+<h1>gputaskman：开源GPU任务管理器</h1>
+<p class="meta">时间：2026-11-25 14:00<br/>来源：helpnetsecurity.com网站<br/>原文：<a href="https://www.helpnetsecurity.com/2026/11/25/gputaskman-open-source-gpu-task-manager/">https://www.helpnetsecurity.com/2026/11/25/gputaskman-open-source-gpu-task-manager/</a></p>
+<h2>中文摘要</h2>
+<p>gputaskman 是一款开源的 GPU 任务管理器，可在 Windows、Linux、WSL 和 Apple Silicon Mac 上通过终端运行。它旨在解决传统工具如 Windows 任务管理器和 nvidia-smi 在监控 GPU 资源时无法准确显示占用者的问题。gputaskman 通过分析驱动程序计数器、加载的库文件、内存映射的文件以及本地 AI 服务的自述信息等线索来识别正在使用 GPU 的具体进程和模型，并明确标注其判断依据。该工具提供了更精确的 GPU 内存使用情况报告，例如区分了桌面合成器（DWM）与实际的 Local Usage 计量。同时，它也提醒用户注意其估算值的局限性，例如在某些模型中 KV cache 的估算可能仅为上限。</p>
+<h2>要点</h2>
+<ul>
+<li>gputaskman 是一个开源工具，用于在 Windows、Linux、WSL 和 Apple Silicon Mac 上监控 GPU 资源使用情况。</li>
+<li>它能识别并显示哪个进程占用 GPU 内存，以及具体的 AI 模型名称，解决了现有工具无法提供详细信息的问题。</li>
+<li>该工具通过综合分析多种线索（如内存映射文件、启动参数）来确认模型的存在，每项发现都附有证据说明。</li>
+<li>输出结果包括模型路径、启动参数和本地端口，可用于详细记录系统的 AI 配置。</li>
+<li>gputaskman 提供的内存使用估计值存在局限性，建议将其作为参考而非绝对数据。</li>
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>
