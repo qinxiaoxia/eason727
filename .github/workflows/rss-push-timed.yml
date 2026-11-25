@@ -42,9 +42,13 @@ jobs:
           WEWE_RSS_URL: ${{ secrets.WEWE_RSS_URL }}
           LLM_MODELS_JSON: ${{ secrets.LLM_MODELS_JSON }}
           LLM_IOC_MODELS_JSON: ${{ secrets.LLM_IOC_MODELS_JSON }}
+          LLM_TRANSLATE_MODELS_JSON: ${{ secrets.LLM_TRANSLATE_MODELS_JSON }}
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
           LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          SUMMARY_PREVIEW_ENABLED: ${{ secrets.SUMMARY_PREVIEW_ENABLED }}
+          SUMMARY_PREVIEW_BASE_URL: ${{ secrets.SUMMARY_PREVIEW_BASE_URL }}
+          SUMMARY_PREVIEW_SHARECODE: ${{ secrets.SUMMARY_PREVIEW_SHARECODE }}
           OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
           OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
           OSS_BUCKET: ${{ secrets.OSS_BUCKET }}

@@ -1320,8 +1320,9 @@ def _summary_file_rel(link: str, published_str: str = "") -> str:
 
 
 def _summary_public_url(link: str, published_str: str, abs_path: Path | None = None) -> str:
-    """优先阿里云 OSS 公开 URL；未配置 OSS 则无法给领导打开。"""
+    """优先阿里云 OSS 公开 URL，再经预览代理换成可读快照；未配置 OSS 则无法给领导打开。"""
     from oss_utils import oss_enabled, oss_object_key, oss_public_url, upload_file
+    from preview_proxy import to_readable_url
 
     day, slug = _summary_day_slug(link, published_str)
     key = oss_object_key(day, slug)
@@ -1330,11 +1331,13 @@ def _summary_public_url(link: str, published_str: str, abs_path: Path | None = N
         return ""
     if abs_path is not None and abs_path.is_file():
         try:
-            return upload_file(key, abs_path)
+            oss_url = upload_file(key, abs_path)
         except Exception as e:
             print(f"[摘要] OSS 上传失败，回退拼 URL: {e}", flush=True)
-            return oss_public_url(key)
-    return oss_public_url(key)
+            oss_url = oss_public_url(key)
+    else:
+        oss_url = oss_public_url(key)
+    return to_readable_url(oss_url) if oss_url else ""
 
 
 _BODY_SUMMARY_SYSTEM = (
@@ -1523,13 +1526,17 @@ def _ensure_chinese_body_summary(item: dict, display_title: str) -> str:
         return ""
     day, slug = _summary_day_slug(link, published_str)
     try:
-        url = upload_html(oss_object_key(day, slug), html)
-        print(f"[摘要] 已上传 OSS: {url}", flush=True)
+        oss_url = upload_html(oss_object_key(day, slug), html)
+        print(f"[摘要] 已上传 OSS: {oss_url}", flush=True)
     except Exception as e:
         print(f"[摘要] OSS 上传失败: {e}", flush=True)
         return ""
 
-    # 回写情报库：中文标题/摘要/链接 + 标签/CVE/实体
+    from preview_proxy import to_readable_url
+
+    url = to_readable_url(oss_url)
+
+    # 回写情报库：中文标题/摘要/链接 + 标签/CVE/实体（外链优先可读快照）
     try:
         from intel_store import persist_article_enrichment
 

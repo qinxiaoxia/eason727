@@ -129,6 +129,18 @@ OSS_PUBLIC_BASE_URL = (os.getenv("OSS_PUBLIC_BASE_URL") or "").rstrip("/")
 # 兼容旧名：若设了 TRANSLATE_VIEW_BASE_URL 且未设 OSS_PUBLIC_BASE_URL，上传后也用它拼链接
 TRANSLATE_VIEW_BASE_URL = (os.getenv("TRANSLATE_VIEW_BASE_URL") or OSS_PUBLIC_BASE_URL or "").rstrip("/")
 
+# 中文摘要可读预览（Workbuddy 等）：OSS 默认域名会强制下载，上传后调同事接口换成快照链接
+# GitHub Secrets：SUMMARY_PREVIEW_BASE_URL / SUMMARY_PREVIEW_SHARECODE
+# SUMMARY_PREVIEW_ENABLED=0 可关闭（企微仍发 OSS 原链）
+SUMMARY_PREVIEW_ENABLED = os.getenv("SUMMARY_PREVIEW_ENABLED", "1").strip().lower() not in (
+    "0",
+    "false",
+    "no",
+    "off",
+)
+SUMMARY_PREVIEW_BASE_URL = (os.getenv("SUMMARY_PREVIEW_BASE_URL") or "").rstrip("/")
+SUMMARY_PREVIEW_SHARECODE = (os.getenv("SUMMARY_PREVIEW_SHARECODE") or "").strip()
+
 # 知识库归档到 OSS（kb/）；KB_ARCHIVE_ENABLED=0 关闭
 OSS_KB_PREFIX = os.getenv("OSS_KB_PREFIX") or "kb/"
 # 每日要点 PDF（briefs/）；DAILY_BRIEF_ENABLED=0 关闭；17:30 档自动生成
