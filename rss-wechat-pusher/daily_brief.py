@@ -223,6 +223,7 @@ def _enrich_articles_for_brief(
     try:
         from main import (
             _ensure_chinese_body_summary,
+            _needs_chinese_body_summary,
             _should_translate_title,
         )
     except Exception as e:
@@ -256,21 +257,21 @@ def _enrich_articles_for_brief(
         url = _lookup_existing_summary_url(
             a.get("link") or "", a.get("published_str") or "", extra_days=extra
         )
+        item = {
+            "title": a.get("title_orig") or a.get("title") or "",
+            "link": a.get("link") or "",
+            "summary": a.get("summary") or "",
+            "published_str": a.get("published_str") or "",
+            "author": a.get("author") or "",
+            "source_url": a.get("source_url") or "",
+        }
         if (
             not url
             and ensure_missing_summary
             and attempts < ensure_limit
-            and a.get("_need_title_zh")
+            and _needs_chinese_body_summary(item, item["title"])
         ):
             attempts += 1
-            item = {
-                "title": a.get("title_orig") or a.get("title") or "",
-                "link": a.get("link") or "",
-                "summary": a.get("summary") or "",
-                "published_str": a.get("published_str") or "",
-                "author": a.get("author") or "",
-                "source_url": "",
-            }
             try:
                 url = _ensure_chinese_body_summary(item, a.get("title") or item["title"]) or ""
             except Exception as e:

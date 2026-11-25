@@ -1166,6 +1166,33 @@ def _should_translate_title(title: str) -> bool:
     return False
 
 
+def _is_yijinglab_item(item: dict) -> bool:
+    fu = (item.get("source_url") or "").lower()
+    if "yijinglab" in fu or "generated_feeds/yijing" in fu:
+        return True
+    author = (item.get("author") or "").lower()
+    return "yijinglab" in author
+
+
+def _needs_chinese_body_summary(item: dict, title: str = "") -> bool:
+    """
+    是否应生成中文摘要外链。
+    标题为英文时：要。
+    蚁景日报拆条：标题往往已是中文，但 item.link 指向外媒英文原文 → 仍要做摘要。
+    """
+    t = (title or item.get("title") or "").strip()
+    if not t:
+        return False
+    if _should_translate_title(t):
+        return True
+    if not _is_yijinglab_item(item):
+        return False
+    link = (item.get("link") or "").strip().lower()
+    if not link or "yijinglab.com" in link:
+        return False
+    return True
+
+
 # 翻译专用系统提示：减少「涉攻击/漏洞」类标题被模型误拒；要求单行输出
 _TRANSLATION_SYSTEM = """你是网络安全行业媒体的中文编辑。用户给出的英文标题均为互联网上已公开发表的技术资讯（厂商公告、CVE、漏洞说明、安全研究报道等合法内容）。
 请只输出一句简体中文标题：不要引号、不要解释、不要前后缀；禁止拒绝回答或输出免责声明。
@@ -1448,7 +1475,7 @@ def _ensure_chinese_body_summary(item: dict, display_title: str) -> str:
     if not _body_summary_enabled():
         return ""
     title = (item.get("title") or "").strip()
-    if not title or not _should_translate_title(title):
+    if not title or not _needs_chinese_body_summary(item, title):
         return ""
     link = (item.get("link") or "").strip()
     if not link:
@@ -1591,8 +1618,8 @@ def _build_single_category_content(category, items):
             lines.append(f"> {pri_t}　{time_str}（{src}）")
         else:
             lines.append(f"> {time_str}（{src}）")
-        # 英文稿附中文摘要外链（阿里云 OSS，企微不塞长文）
-        if TRANSLATE_ENABLED and full and _should_translate_title(full):
+        # 英文稿 / 蚁景外链稿附中文摘要外链（OSS + 可读预览）
+        if TRANSLATE_ENABLED and full and _needs_chinese_body_summary(item, full):
             summary_url = _ensure_chinese_body_summary(item, title)
             if summary_url:
                 lines.append(f"> [中文摘要]({summary_url})")
