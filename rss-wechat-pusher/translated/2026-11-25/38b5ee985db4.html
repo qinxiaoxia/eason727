@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>GeoServer未认证RCE漏洞链(CVE链)风险通告</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}
+h1{font-size:1.25rem;margin:0 0 12px;line-height:1.4}
+.meta{font-size:.9rem;color:#555;margin:0 0 20px}
+.meta a{color:#06c;word-break:break-all}
+h2{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}
+p{margin:0 0 12px;white-space:pre-wrap}
+ul{margin:0;padding-left:1.2em}
+li{margin:6px 0}
+.foot{margin-top:28px;font-size:.8rem;color:#888}
+</style>
+</head>
+<body>
+<h1>GeoServer未认证RCE漏洞链(CVE链)风险通告</h1>
+<p class="meta">时间：2026-11-25 02:56<br/>来源：奇安信 CERT公众号<br/>原文：<a href="https://mp.weixin.qq.com/s/p5H7W3stxgKy7pLsNLwhgw">https://mp.weixin.qq.com/s/p5H7W3stxgKy7pLsNLwhgw</a></p>
+<h2>中文摘要</h2>
+<p>GeoServer存在未认证远程代码执行漏洞链（CVE链），涉及五个CVE编号，CVSS评分为9.8，属于高危级别。该漏洞允许攻击者在无需认证的情况下，通过WFS服务名解析漏洞、XInclude文件读取、固定remember-me密钥构造会话等方式，连续利用多个缺陷实现任意命令执行。漏洞影响版本包括GeoServer 2.27.6及以下、2.28.0至2.28.5以及3.0.0至3.0.1。奇安信监测显示全球受影响资产达18412个，国内3852个。官方已发布补丁，建议用户尽快升级至3.0.2、2.28.6、2.27.7或更高版本，并采取临时缓解措施降低风险。</p>
+<h2>要点</h2>
+<ul>
+<li>GeoServer存在未认证RCE漏洞链，影响范围广，CVSS评分为9.8，属高危漏洞。</li>
+<li>攻击者可利用WFS服务漏洞、XInclude读取配置、remember-me密钥伪造会话等步骤实现任意代码执行。</li>
+<li>受影响版本包括GeoServer 2.27.6及以下、2.28.0至2.28.5和3.0.0至3.0.1。</li>
+<li>全球约18412个资产受影响，国内3852个，主要分布于政务、测绘及GIS平台。</li>
+<li>建议及时更新至安全补丁版本，并配合WAF限制访问、修改密钥等临时措施加强防护。</li>
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>
