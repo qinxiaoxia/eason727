@@ -164,7 +164,7 @@ _FINANCIAL_ENTITY = re.compile(
     r"(?i)("
     r"银行|城商行|信用社|农商行|证券|券商|期货|基金|保险|信托|银保监|证监|央行|人民银行|"
     r"支付宝|微信支付|银联|网联|支付机构|第三方支付|清算|交易所|上交所|深交所|港交所|"
-    r"彩票|福利彩票|体育彩票|消费金融|小额贷款|小贷|融资担保|类金融|互联网金融|"
+    r"彩票|福利彩票|消费金融|小额贷款|小贷|融资担保|类金融|互联网金融|"
     r"信用卡|网银|理财|投行|支付牌照|数字人民币|金融科技|"
     r"\bbank\b|securities|broker(?:age)?|insurer?|insurance|lottery|fintech|"
     r"stock\s+exchange|nasdaq|nyse|payment\s+(?:processor|provider)|swift\b"
