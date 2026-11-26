@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Proxmox 9.3为SAN支持的虚拟机新增生产快照功能</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}
+h1{font-size:1.25rem;margin:0 0 12px;line-height:1.4}
+.meta{font-size:.9rem;color:#555;margin:0 0 20px}
+.meta a{color:#06c;word-break:break-all}
+h2{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}
+p{margin:0 0 12px;white-space:pre-wrap}
+ul{margin:0;padding-left:1.2em}
+li{margin:6px 0}
+.foot{margin-top:28px;font-size:.8rem;color:#888}
+</style>
+</head>
+<body>
+<h1>Proxmox 9.3为SAN支持的虚拟机新增生产快照功能</h1>
+<p class="meta">时间：2026-11-26 14:07<br/>来源：helpnetsecurity.com网站<br/>原文：<a href="https://www.helpnetsecurity.com/2026/11/26/proxmox-9-3-adds-production-snapshots-for-san-backed-vms/">https://www.helpnetsecurity.com/2026/11/26/proxmox-9-3-adds-production-snapshots-for-san-backed-vms/</a></p>
+<h2>中文摘要</h2>
+<p>Proxmox Virtual Environment 9.3 has been released, introducing production support for snapshots on SAN-backed虚拟机 (VMs) using iSCSI and Fibre Channel。该功能允许管理员在进行高风险操作前对位于SAN存储上的虚拟机创建快照，这些快照基于LVM卷组的厚置备模式实现。此外，每个虚拟机现在都具有一个持久性的身份标识，即使经过迁移、备份或恢复，这个标识也保持不变，便于外部管理工具和备份软件进行识别。新版本还改进了SAN配置流程，通过新的数据中心视图实时显示所有节点的LUN路径状态，并引入了更直观的多路径设置工作流。界面方面新增了带颜色编码和可过滤的日志系统（包括系统日志、API访问日志和APT历史记录），并支持简单的SDN隔离。Ceph Umbrella 21.2目前仍处于技术预览阶段，提供强化的默认加密和在线密钥轮换功能。底层操作系统升级至Debian 13.8，Linux内核默认为7.0，也可选择性升级到7.3。</p>
+<h2>要点</h2>
+<ul>
+<li>Proxmox VE 9.3正式支持SAN存储上的生产快照功能，适用于iSCSI和Fibre Channel连接的LVM卷组。</li>
+<li>虚拟机获得了持久化的身份标识，确保其在整个生命周期中被备份和管理工具正确识别。</li>
+<li>SAN配置体验得到优化，新增多路径配置向导和全集群LUN路径状态监控视图。</li>
+<li>Web界面增强了日志功能，增加了系统日志、API访问日志和APT历史记录，并支持SDN隔离。</li>
+<li>Ceph Umbrella 21.2以技术预览形式发布，包含CephX认证和在线密钥旋转功能；Ceph Tentacle 20.2为稳定版。</li>
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>谷歌自2027年2月起强制要求Workspace AI代理使用MCP或CLI访问权限</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}
+h1{font-size:1.25rem;margin:0 0 12px;line-height:1.4}
+.meta{font-size:.9rem;color:#555;margin:0 0 20px}
+.meta a{color:#06c;word-break:break-all}
+h2{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}
+p{margin:0 0 12px;white-space:pre-wrap}
+ul{margin:0;padding-left:1.2em}
+li{margin:6px 0}
+.foot{margin-top:28px;font-size:.8rem;color:#888}
+</style>
+</head>
+<body>
+<h1>谷歌自2027年2月起强制要求Workspace AI代理使用MCP或CLI访问权限</h1>
+<p class="meta">时间：2026-11-26 13:30<br/>来源：helpnetsecurity.com网站<br/>原文：<a href="https://www.helpnetsecurity.com/2026/11/26/google-ai-agent-security-requirements/">https://www.helpnetsecurity.com/2026/11/26/google-ai-agent-security-requirements/</a></p>
+<h2>中文摘要</h2>
+<p>Google将从2027年2月1日起，强制要求所有连接到其Workspace的AI代理（Agent）必须通过专用的MCP服务器或命令行接口（CLI）进行访问，以应对自主AI代理带来的安全风险。此举旨在限制企业数据的访问权限、防止敏感操作并防范提示注入攻击。新规则将对第三方AI工具的数据处理和访问进行严格限制，并引入了专用的代理身份认证机制。同时，在Google Cloud平台，AI agents也将获得独立的身份并通过身份与访问管理（IAM）政策进行管控。此外，Google还计划推出新的数据保留策略，禁止永久存储原始Workspace数据用于模型训练等目的。</p>
+<h2>要点</h2>
+<ul>
+<li>自2027年2月起，Google要求所有Workspace AI Agent必须使用MCP服务器或CLI接入，传统REST API将不再被支持。</li>
+<li>引入专用代理身份、基于DLP和分类标签的请求审核机制，以及对敏感操作的人类确认流程。</li>
+<li>在Google Cloud中，AI Agents通过Agent Registry获得唯一身份，受IAM政策和配额限制。</li>
+<li>新协议层安全功能包括身份验证、默认拒绝出站连接及集成Model Armor服务筛查提示注入攻击。</li>
+<li>禁止AI工具永久存储原始Workspace数据或将其用于模型训练，并设定30天的技术信息保留期限。</li>
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>
