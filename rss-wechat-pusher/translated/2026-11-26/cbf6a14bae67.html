@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Palo Alto防火墙遭攻击，Fragnesia漏洞被利用</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}
+h1{font-size:1.25rem;margin:0 0 12px;line-height:1.4}
+.meta{font-size:.9rem;color:#555;margin:0 0 20px}
+.meta a{color:#06c;word-break:break-all}
+h2{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}
+p{margin:0 0 12px;white-space:pre-wrap}
+ul{margin:0;padding-left:1.2em}
+li{margin:6px 0}
+.foot{margin-top:28px;font-size:.8rem;color:#888}
+</style>
+</head>
+<body>
+<h1>Palo Alto防火墙遭攻击，Fragnesia漏洞被利用</h1>
+<p class="meta">时间：2026-11-26 09:28<br/>来源：www.yijinglab.com<br/>原文：<a href="https://security.paloaltonetworks.com/PAN-SA-2026-0015">https://security.paloaltonetworks.com/PAN-SA-2026-0015</a></p>
+<h2>中文摘要</h2>
+<p>Palo Alto Networks 发布安全公告 PAN-SA-2026-0015，披露其 PAN-OS 系统中修复的多个开源软件（OSS）漏洞。其中，CVE-2026-46300 是一个影响 Linux 内核的本地权限提升漏洞，也被称作 Fragnesia 漏洞。该漏洞已被证实被用于攻击互联网上暴露的 Palo Alto 防火墙管理接口。厂商已针对不同 PAN-OS 版本发布了固定补丁，包括 10.2.7-h41、10.2.10-h45 等多个版本，并建议用户尽快升级至相应版本以避免风险。</p>
+<h2>要点</h2>
+<ul>
+<li>CVE-2026-46300 是一个名为 Fragnesia 的 Linux 内核本地权限提升漏洞。</li>
+<li>该漏洞已被观察到被利用，攻击对象为暴露在互联网上的 Palo Alto 防火墙管理接口。</li>
+<li>Palo Alto Networks 已在多个 PAN-OS 版本中修复此 CVE，包括 10.2.x、11.1.x 和 11.2.x 等系列。</li>
+<li>最佳实践建议将管理接口限制在受信任的内部 IP 地址访问范围内，以降低风险。</li>
+<li>目前仅知通过 PHP2Shell 漏洞结合 Fragnesia 进行攻击，无其他公开的利用方式。</li>
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Hex.pm遭RCE攻击，6台服务器受影响</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}
+h1{font-size:1.25rem;margin:0 0 12px;line-height:1.4}
+.meta{font-size:.9rem;color:#555;margin:0 0 20px}
+.meta a{color:#06c;word-break:break-all}
+h2{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}
+p{margin:0 0 12px;white-space:pre-wrap}
+ul{margin:0;padding-left:1.2em}
+li{margin:6px 0}
+.foot{margin-top:28px;font-size:.8rem;color:#888}
+</style>
+</head>
+<body>
+<h1>Hex.pm遭RCE攻击，6台服务器受影响</h1>
+<p class="meta">时间：2026-11-26 09:28<br/>来源：www.yijinglab.com<br/>原文：<a href="https://hex.pm/blog/security-incident-on-hexpm">https://hex.pm/blog/security-incident-on-hexpm</a></p>
+<h2>中文摘要</h2>
+<p>Hex.pm于2026年11月23日遭遇远程代码执行（RCE）攻击，攻击者利用了一个特定漏洞在短时间内向其服务器发送了69个恶意请求，并影响了六台Web服务器。Hex迅速响应，在约20分钟内部署修复并阻断攻击流量。尽管未发现包或数据库被篡改的证据，但因数据库读取操作未被记录，无法排除攻击者访问存储数据的可能性，包括邮箱、密码哈希、API密钥和两步验证（2FA）信息等敏感内容。为此，Hex已轮换所有受影响服务的凭证，并强制用户登出。同时，Hex团队披露了该漏洞的详细技术分析，并确认类似问题也存在于Elixir生态库Ash中，后者已发布补丁。</p>
+<h2>要点</h2>
+<ul>
+<li>Hex.pm于2026年11月23日遭RCE攻击，影响6台服务器，攻击者通过伪造结构体绕过安全检查实现命令执行。</li>
+<li>公司迅速响应，20分钟内部署修复、阻断攻击并轮换了数据库、CDN、邮件及会话签名等关键凭证。</li>
+<li>由于数据库读取无日志记录，存在敏感信息泄露风险，建议用户警惕仿冒Hex的电子邮件并更新账户安全设置。</li>
+<li>漏洞根源在于Plug.Crypto模块对未认证请求中的结构体处理不当，导致错误堆栈中可执行任意代码。</li>
+<li>相关修复已在hexpm commit 379b0a2中完成，且计划推进多个底层依赖库的安全加固以杜绝同类问题。</li>
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>
