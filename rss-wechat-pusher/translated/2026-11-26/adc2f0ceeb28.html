@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Linux/EasyShell：MalwareMustDie确认这是最早公开记录的专为LoongArch Linux打造的RAT之一</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}
+h1{font-size:1.25rem;margin:0 0 12px;line-height:1.4}
+.meta{font-size:.9rem;color:#555;margin:0 0 20px}
+.meta a{color:#06c;word-break:break-all}
+h2{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}
+p{margin:0 0 12px;white-space:pre-wrap}
+ul{margin:0;padding-left:1.2em}
+li{margin:6px 0}
+.foot{margin-top:28px;font-size:.8rem;color:#888}
+</style>
+</head>
+<body>
+<h1>Linux/EasyShell：MalwareMustDie确认这是最早公开记录的专为LoongArch Linux打造的RAT之一</h1>
+<p class="meta">时间：2026-11-26 22:42<br/>来源：securityaffairs.co网站<br/>原文：<a href="https://securityaffairs.com/204067/malware/linux-easyshell-malwaremustdie-identifies-one-of-the-earliest-publicly-documented-rats-built-for-loongarch-linux.html">https://securityaffairs.com/204067/malware/linux-easyshell-malwaremustdie-identifies-one-of-the-earliest-publicly-documented-rats-built-for-loongarch-linux.html</a></p>
+<h2>中文摘要</h2>
+<p>网络安全组织MalwareMustDie分析了一种名为Linux/EasyShell的新型多平台RAT（远程访问木马），该木马是针对LoongArch架构Linux系统的早期公开案例之一。该恶意软件最初通过一个伪装成矿机卸载程序的shell脚本传播，其真实目的是在受害主机上安装一个基于Rust语言编写的植入程序。该植入程序会与位于美国ColoCrossing服务器上的C2（命令与控制）服务器通信，并根据系统类型（Linux或macOS）下载并安装不同的payload版本。这些版本包括支持x86、ARM和LoongArch架构的二进制文件。研究人员指出，虽然LoongArch版本是目前所知最早的此类公开记录，但其并非攻击者特别选择的目标，而是EasyShell框架的默认选项。此外，该恶意软件具有隐蔽性，例如会将自身重命名为类似内核线程的名字（如kworker/0:0）。由于每次生成时都会随机填充字节，因此每个受害者获得的样本哈希值都不同。报告还提供了检测规则，并警告安全团队，在处理感染系统时应首先隔离并保留现场证据，切勿直接终止可疑进程。</p>
+<h2>要点</h2>
+<ul>
+<li>MalwareMustDie发现并分析了Linux/EasyShell，一种基于Rust的多平台RAT，包含针对LoongArch Linux的早期公开实现。</li>
+<li>该恶意软件通过一个伪装的shell脚本作为初始载体，从位于美国的C2服务器下载并安装多种架构（x86, ARM, LoongArch）的payload。</li>
+<li>LoongArch版本是EasyShell框架的默认选项，并非此次攻击者的特意选择，且可能未在真实硬件上进行过测试。</li>
+<li>该植入程序具备远程执行命令、文件操作、Socks5代理等功能，并能隐藏自己，将其进程名伪装为kernel thread。</li>
+<li>研究人员建议安全团队使用提供的YARA、Sigma等规则进行检测，并强调在取证时应先隔离系统，避免立即终止可疑进程以防止数据丢失。</li>
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>
