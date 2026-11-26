@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Azure APIM凭据风险：Equinor事件后的轮换与追查</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}
+h1{font-size:1.25rem;margin:0 0 12px;line-height:1.4}
+.meta{font-size:.9rem;color:#555;margin:0 0 20px}
+.meta a{color:#06c;word-break:break-all}
+h2{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}
+p{margin:0 0 12px;white-space:pre-wrap}
+ul{margin:0;padding-left:1.2em}
+li{margin:6px 0}
+.foot{margin-top:28px;font-size:.8rem;color:#888}
+</style>
+</head>
+<body>
+<h1>Azure APIM凭据风险：Equinor事件后的轮换与追查</h1>
+<p class="meta">时间：2026-11-26 13:09<br/>来源：奇安信威胁情报中心公众号<br/>原文：<a href="https://mp.weixin.qq.com/s/i4mNp7AWRXH7gRXw6y9eSw">https://mp.weixin.qq.com/s/i4mNp7AWRXH7gRXw6y9eSw</a></p>
+<h2>中文摘要</h2>
+<p>挪威能源企业Equinor于11月20日宣布，其针对部分IT系统的网络攻击已停止，生产未受影响。然而，事件的真正风险并未结束。挪威国家安全局（NSM）与微软指出，尽管微软已于11月19日关闭了Azure API Management (APIM) Classic中一个可被利用的管理面访问路径，但这并不能自动使此前可能已被窃取的密钥、令牌等凭据失效。因此，防守方的核心任务是对所有可能暴露的凭据进行轮换和追踪。受影响的是特定配置下的APIM Classic层级（Developer、Basic、Standard和Premium），而非所有Azure APIM实例。NSM建议所有使用APIM的机构应假设其凭据已暴露，并立即执行全面轮换。</p>
+<h2>要点</h2>
+<ul>
+<li>攻击核心是Azure APIM Classic的管理面，攻击者可在特定条件下执行包括秘密管理在内的管理操作。</li>
+<li>潜在暴露的凭据不仅限于API订阅密钥，还包括Named Values中的秘密、身份提供者的客户端秘密以及直接管理API的令牌。</li>
+<li>微软的修复仅关闭了攻击入口，不能自动使已泄露的凭据失效，客户必须主动完成凭据轮换。</li>
+<li>应急处置需分步进行：盘点并确认实例版本、在源头轮换所有凭据、关闭不再需要的遗留访问路径，并将调查扩展到下游资源如Key Vault和后端系统。</li>
+<li>此次事件凸显了对API管理面进行全面监控的重要性，因为即使没有恶意软件，攻击者也可能利用有效凭据持续访问云服务。</li>
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>

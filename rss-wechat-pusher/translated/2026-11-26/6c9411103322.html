@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Palo Alto Networks 警告 Fragnesia 漏洞在 PAN-OS 攻击中被利用</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}
+h1{font-size:1.25rem;margin:0 0 12px;line-height:1.4}
+.meta{font-size:.9rem;color:#555;margin:0 0 20px}
+.meta a{color:#06c;word-break:break-all}
+h2{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}
+p{margin:0 0 12px;white-space:pre-wrap}
+ul{margin:0;padding-left:1.2em}
+li{margin:6px 0}
+.foot{margin-top:28px;font-size:.8rem;color:#888}
+</style>
+</head>
+<body>
+<h1>Palo Alto Networks 警告 Fragnesia 漏洞在 PAN-OS 攻击中被利用</h1>
+<p class="meta">时间：2026-11-26 11:28<br/>来源：未知网站<br/>原文：<a href="http://hackernews.cc/post/64955">http://hackernews.cc/post/64955</a></p>
+<h2>中文摘要</h2>
+<p>Palo Alto Networks 警告称，攻击者正在结合利用 PHP2Shell 漏洞（包含 CVE-2026-109618 和 CVE-2026-109619）与 Fragnesia 漏洞（CVE-2026-46300），对暴露在互联网上的 PAN-OS 防火墙设备发起攻击。PHP2Shell 允许未认证的远程代码执行，而 Fragnesia 是一个可导致本地权限提升至 root 的 Linux 内核漏洞。美国 CISA 已对此发出警报，指出该组合攻击已被用于部署 webshell 并以 root 权限执行命令。Dream Security 研究人员也观察到类似攻击活动，影响包括美国政府附属机构在内的多国服务器。Palo Alto Networks 确认其 PAN-OS 设备也成为目标，所有攻击均针对暴露于公网的管理接口。公司已为多个 PAN-OS 版本发布修复补丁，并建议管理员除了更新系统外，还应限制远程管理接口仅允许来自受信任 IP 地址的访问。</p>
+<h2>要点</h2>
+<ul>
+<li>攻击者结合利用 PHP2Shell（CVE-2026-109618/19）和 Fragnesia（CVE-2026-46300）漏洞进行攻击。</li>
+<li>PHP2Shell 允许未认证远程执行代码，Fragnesia 可实现从低权限提升至 root 权限。</li>
+<li>CISA 和 Dream Security 均报告此类攻击链被用于攻击全球范围内的服务器，包括政府机构。</li>
+<li>Palo Alto Networks 表示攻击主要针对暴露在公网上的 PAN-OS 设备管理接口。</li>
+<li>厂商已发布多个版本的 Fragnesia 漏洞补丁，并建议限制管理接口访问来源。</li>
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>
