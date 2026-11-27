@@ -2037,6 +2037,27 @@ def main():
                 })
             row_items = _exclude_noise_items(conn, row_items)
             row_items = _dedupe_cross_source(conn, row_items)
+            try:
+                from vuln_push_filter import filter_timed_items_for_vuln_push
+
+                row_items, vuln_skipped = filter_timed_items_for_vuln_push(row_items)
+            except Exception as e:
+                print(f"[漏洞过滤] 加载失败，按原样推送: {e}", flush=True)
+                vuln_skipped = []
+            if vuln_skipped:
+                now_skip = datetime.now().isoformat()
+                for item in vuln_skipped:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO pushed (link, pushed_at, push_type) VALUES (?, ?, ?)",
+                        (item["link"], now_skip, "vuln_filtered"),
+                    )
+                    reason = item.get("_vuln_skip_reason") or "未命中推送条件"
+                    print(
+                        f"[漏洞过滤] 跳过推送: {(item.get('title') or '')[:48]} ({reason})",
+                        flush=True,
+                    )
+                conn.commit()
+                print(f"[漏洞过滤] 本轮跳过 {len(vuln_skipped)} 条漏洞（已入库，不发企微）", flush=True)
             if row_items:
                 by_cat = {}
                 for item in row_items:
@@ -2050,6 +2071,11 @@ def main():
                     )
                 conn.commit()
                 print(f"定时推送 {len(row_items)} 条")
+            elif force_timed_digest and not vuln_skipped:
+                hint = "（含昨天）" if include_yesterday else ""
+                print(f"定时推送: 0 条{hint}（无待推送文章，可能已推送过）")
+            elif force_timed_digest and vuln_skipped and not row_items:
+                print("定时推送: 0 条（待推漏洞均被过滤）", flush=True)
         elif force_timed_digest:
             hint = "（含昨天）" if include_yesterday else ""
             print(f"定时推送: 0 条{hint}（无待推送文章，可能已推送过）")

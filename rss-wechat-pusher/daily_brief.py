@@ -60,13 +60,23 @@ def _beijing_day_from_pushed_at(ts: str) -> str:
 
 
 def _pushed_links_on_beijing_day(conn: sqlite3.Connection, day: str) -> set:
-    """当天（北京）在企微推送过的链接。"""
+    """当天（北京）真正发到企微的链接（不含 vuln_filtered 等仅标记跳过）。"""
     try:
-        cur = conn.execute("SELECT link, pushed_at FROM pushed")
+        cur = conn.execute("PRAGMA table_info(pushed)")
+        cols = {row[1] for row in cur.fetchall()}
+        if "push_type" in cols:
+            cur = conn.execute(
+                "SELECT link, pushed_at, push_type FROM pushed "
+                "WHERE COALESCE(push_type,'') IN ('','realtime','scheduled')"
+            )
+            rows = [(a, b) for a, b, _t in cur.fetchall()]
+        else:
+            cur = conn.execute("SELECT link, pushed_at FROM pushed")
+            rows = cur.fetchall()
     except Exception:
         return set()
     out = set()
-    for link, pushed_at in cur.fetchall():
+    for link, pushed_at in rows:
         if not link:
             continue
         if _beijing_day_from_pushed_at(pushed_at or "") == day:

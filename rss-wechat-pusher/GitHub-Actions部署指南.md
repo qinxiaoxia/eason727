@@ -89,6 +89,8 @@ FreeBuf 会对部分**云主机出口 IP**返回 `405 Not Allowed`。脚本已�
 | `LLM_BASE_URL` | 如 `https://dashscope.aliyuncs.com/compatible-mode/v1`（通义） |
 | **`LLM_MODELS_JSON`** | **推荐**：分类/摘要等多模型回退，如 `["qwen-plus","qwen-turbo"]` |
 | **`LLM_TRANSLATE_MODELS_JSON`** | **标题翻译专用**，推荐 `["qwen-mt-flash"]`（通义翻译模型；勿把 mt 填进上面的 MODELS，分类会坏） |
+| `VULN_PUSH_FILTER` | 可选，`0` 关闭漏洞推送收紧（默认开启：常用组件或高危/大规模才推） |
+| `VULN_COMPONENT_WHITELIST` | 可选，逗号追加组件词，如 `php,spring,某核心系统` |
 | `LLM_MODEL` | 单模型时用，如 `qwen-plus`（与 `LLM_MODELS_JSON` 二选一即可；都配时优先 JSON 列表） |
 | `WEWE_RSS_URL` | 你的 WeWe RSS 地址，如 `https://eason727.zeabur.app` |
 | `FREEBUF_RSS_MIRROR` | 可选。FreeBuf 官方 feed 在 Actions 上 405 时，填镜像 RSS 全文 URL |

@@ -146,6 +146,17 @@ OSS_KB_PREFIX = os.getenv("OSS_KB_PREFIX") or "kb/"
 # 每日要点 PDF（briefs/）；DAILY_BRIEF_ENABLED=0 关闭；北京 18:00 轮巡后自动生成
 OSS_BRIEF_PREFIX = os.getenv("OSS_BRIEF_PREFIX") or "briefs/"
 
+# 漏洞信息推送收紧（仍入库；企微仅推「常用组件 OR 大规模/高危」）
+# VULN_PUSH_FILTER=0 关闭过滤；VULN_COMPONENT_WHITELIST / VULN_SEVERITY_EXTRA 逗号追加关键词
+VULN_PUSH_FILTER = os.getenv("VULN_PUSH_FILTER", "1").strip().lower() not in (
+    "0",
+    "false",
+    "no",
+    "off",
+)
+# 可选：覆盖默认组件白名单（列表）；不配则用 vuln_push_filter 内置（含 PHP/Spring/Nginx 等）
+# VULN_COMPONENT_WHITELIST = ["php", "spring", "nginx"]
+
 # 公众号噪声：规则未命中时用分类模型复核是否属网安/AI 情报（见 classifier.exclusion_reason）
 # 环境变量 NOISE_LLM_REVIEW=0 关闭；=all 时对全部 RSS 源复核
 NOISE_LLM_REVIEW = os.getenv("NOISE_LLM_REVIEW", "").strip().lower() not in ("0", "false", "no", "off")
