@@ -42,8 +42,47 @@ def _db_path() -> Path:
         return _ROOT / "rss_push.db"
 
 
+def _beijing_day_from_pushed_at(ts: str) -> str:
+    """pushed_at → 北京日历日。无时区时按 UTC（GitHub Actions），再转 Asia/Shanghai。"""
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+
+    raw = (ts or "").strip()
+    if not raw:
+        return ""
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return raw[:10] if len(raw) >= 10 else ""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
+
+
+def _pushed_links_on_beijing_day(conn: sqlite3.Connection, day: str) -> set:
+    """当天（北京）在企微推送过的链接。"""
+    try:
+        cur = conn.execute("SELECT link, pushed_at FROM pushed")
+    except Exception:
+        return set()
+    out = set()
+    for link, pushed_at in cur.fetchall():
+        if not link:
+            continue
+        if _beijing_day_from_pushed_at(pushed_at or "") == day:
+            out.add(link)
+    return out
+
+
 def _articles_for_day(conn: sqlite3.Connection, day: str) -> List[Dict[str, Any]]:
-    # published_str 前 10 位或 first_seen_at 日期；兼容情报库扩展列
+    """
+    日报只收录「北京当天已向企微推送过」的文章（pushed 表），
+    不含仅入库未推送的条目。
+    """
+    pushed_links = _pushed_links_on_beijing_day(conn, day)
+    if not pushed_links:
+        return []
+
     cur = conn.execute("PRAGMA table_info(articles)")
     cols = {row[1] for row in cur.fetchall()}
     has_intel = "title_zh" in cols and "summary_url" in cols
@@ -51,8 +90,7 @@ def _articles_for_day(conn: sqlite3.Connection, day: str) -> List[Dict[str, Any]
         sql = """SELECT link, title, summary, category, incident_priority, author, published_str,
                         title_zh, summary_zh, summary_url
                  FROM articles
-                 WHERE substr(COALESCE(published_str,''),1,10)=?
-                    OR substr(COALESCE(first_seen_at,''),1,10)=?
+                 WHERE link IN ({ph})
                  ORDER BY
                    CASE category
                      WHEN '监管机构预警' THEN 0
@@ -68,10 +106,11 @@ def _articles_for_day(conn: sqlite3.Connection, day: str) -> List[Dict[str, Any]
     else:
         sql = """SELECT link, title, summary, category, incident_priority, author, published_str
                  FROM articles
-                 WHERE substr(COALESCE(published_str,''),1,10)=?
-                    OR substr(COALESCE(first_seen_at,''),1,10)=?
+                 WHERE link IN ({ph})
                  ORDER BY published_str DESC"""
-    cur = conn.execute(sql, (day, day))
+    links = list(pushed_links)
+    ph = ",".join("?" * len(links))
+    cur = conn.execute(sql.format(ph=ph), links)
     rows = []
     for row in cur.fetchall():
         if has_intel:
