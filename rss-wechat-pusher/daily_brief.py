@@ -686,10 +686,9 @@ def _notify_wechat_pdf(day: str, pdf_bytes: bytes) -> None:
 
 def maybe_run_end_of_day_brief(slot, conn: sqlite3.Connection, mode: str = None) -> None:
     """
-    每天最后一轮推送后再出 PDF。
-    - 优先：北京 18 点轮巡（mode=poll）结束后
-    - 或环境变量 GENERATE_DAILY_BRIEF=1 强制
-    不再在 17:30 定时档自动发送（避免与 18:00 各发一份）。
+    当天最后一轮「定时六类」推送（北京 17:30）结束后出 PDF。
+    18:00 轮巡只补推实时两类，不再出 PDF（避免一天两份）。
+    可用 GENERATE_DAILY_BRIEF=1 强制；同日已推过则跳过。
     """
     force = (os.getenv("GENERATE_DAILY_BRIEF") or "").strip().lower() in (
         "1",
@@ -697,15 +696,7 @@ def maybe_run_end_of_day_brief(slot, conn: sqlite3.Connection, mode: str = None)
         "yes",
         "on",
     )
-    try:
-        from zoneinfo import ZoneInfo
-        from datetime import datetime
-
-        hour = datetime.now(ZoneInfo("Asia/Shanghai")).hour
-    except Exception:
-        hour = -1
-    is_last_poll = (mode or "").strip().lower() == "poll" and hour == 18
-    if not force and not is_last_poll:
+    if not force and slot != (17, 30):
         return
     if (os.getenv("DAILY_BRIEF_ENABLED", "1") or "1").strip().lower() in (
         "0",

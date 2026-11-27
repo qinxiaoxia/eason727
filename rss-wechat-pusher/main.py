@@ -2061,7 +2061,7 @@ def main():
     except Exception as e:
         print(f"[知识库] {e}", flush=True)
 
-    # 每日要点 PDF：当天最后一轮（北京 18 点轮巡）或 --daily-brief / GENERATE_DAILY_BRIEF=1
+    # 每日要点 PDF：当天最后一轮定时六类（北京 17:30）或 --daily-brief / GENERATE_DAILY_BRIEF=1
     try:
         from daily_brief import generate_daily_brief, maybe_run_end_of_day_brief
 
