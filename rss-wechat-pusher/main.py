@@ -1147,21 +1147,24 @@ def _has_chinese(text):
 
 def _should_translate_title(title: str) -> bool:
     """
-    是否需要将标题译为中文（用于推送展示）。
-    - 无中文（CJK 统一表意区）：译
-    - 中英混合：英文字母数明显多于汉字时仍译（避免「短英文前缀+少量汉字」被误判为已中文化）
+    是否当作「英文稿」：需要译标题 / 出中文摘要外链。
+    - 无汉字：译
+    - 已有明显中文主体（如「VMware … 高危漏洞可未授权…」）：不译、不出摘要
+      （专有名词英文不算「英文文章」）
+    - 仅夹少量汉字、主体仍是英文：仍译
     """
     if not title or not str(title).strip():
         return False
     t = str(title).strip()
-    if not _has_chinese(t):
-        return True
     cn = sum(1 for c in t if "\u4e00" <= c <= "\u9fff")
-    latin = sum(1 for c in t if "a" <= c <= "z" or "A" <= c <= "Z")
-    # 原阈值 latin>=6 过严：如 "RCE风险" "AI安全周报" 会整句不译
-    if latin >= 3 and latin >= cn * 1.05:
+    latin = sum(1 for c in t if ("a" <= c <= "z") or ("A" <= c <= "Z"))
+    if cn == 0:
         return True
-    if latin >= cn * 1.5:
+    # 中文够成句：即使前面有产品英文名也不当英文稿
+    if cn >= 4:
+        return False
+    # 极少汉字 + 英文占绝对主体
+    if latin >= 10 and latin >= cn * 4:
         return True
     return False
 
