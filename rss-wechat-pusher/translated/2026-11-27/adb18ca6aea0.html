@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Radware云WAF接口裸奔，客户云存储密钥泄露</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+margin:0;padding:20px 18px 48px;line-height:1.65;color:#1a1a1a;background:#fafafa;max-width:720px}
+h1{font-size:1.25rem;margin:0 0 12px;line-height:1.4}
+.meta{font-size:.9rem;color:#555;margin:0 0 20px}
+.meta a{color:#06c;word-break:break-all}
+h2{font-size:1.05rem;margin:22px 0 10px;border-left:3px solid #1a6fb5;padding-left:8px}
+p{margin:0 0 12px;white-space:pre-wrap}
+ul{margin:0;padding-left:1.2em}
+li{margin:6px 0}
+.foot{margin-top:28px;font-size:.8rem;color:#888}
+</style>
+</head>
+<body>
+<h1>Radware云WAF接口裸奔，客户云存储密钥泄露</h1>
+<p class="meta">时间：2026-11-27 08:52<br/>来源：www.yijinglab.com<br/>原文：<a href="https://www.bleepingcomputer.com/news/security/radware-discloses-breach-exposing-customer-cloud-access-keys/">https://www.bleepingcomputer.com/news/security/radware-discloses-breach-exposing-customer-cloud-access-keys/</a></p>
+<h2>中文摘要</h2>
+<p>安全厂商Radware因内部Cloud WAF管理API配置错误，导致该接口于11月19日暴露在公网且未设认证机制。该漏洞在约10小时后被发现并封堵，期间可能造成客户联系信息及用于导出WAF日志至自管云存储（如AWS S3、Azure Blob Storage或SFTP）的访问密钥泄露。部分客户已收到异常IP访问其云存储桶的告警。Radware表示其核心WAF流量防护与DDoS服务未受影响，并敦促受影响客户立即轮换相关密钥。</p>
+<h2>要点</h2>
+<ul>
+<li>Radware内部使用的Cloud WAF管理API因配置不当暴露于公网且无需认证。</li>
+<li>漏洞暴露时长约10小时，发生在2026年11月19日，随后被发现并关闭。</li>
+<li>可能导致客户联系信息以及用于WAF日志导出的云存储访问密钥泄露。</li>
+<li>已有客户反映出现异常IP访问其AWS存储桶的情况。</li>
+<li>Radware强调其核心防护服务未受波及，并建议受影响客户立即轮换密钥。</li>
+</ul>
+<p class="foot">由 RSS 推送机器人自动生成，仅供内部快速阅读；细节以原文为准。</p>
+</body>
+</html>
