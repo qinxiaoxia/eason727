@@ -123,7 +123,7 @@ GitHub / jsDelivr 国内常打不开，摘要 HTML 先上传 OSS；OSS 默认域
 
 - 检索页：`https://<OSS_PUBLIC_BASE_URL>/kb/search.html`
 - 按日数据：`kb/days/YYYY-MM-DD.json`
-- 每日要点：北京 **17:30 定时档**（当天最后一轮定时六类推送）结束后生成 `briefs/YYYY-MM-DD.pdf`；18:00 轮巡不再发 PDF；同日已推过则跳过
+- 每日要点：北京 **18:00 轮巡**结束后生成 `briefs/YYYY-MM-DD.pdf`（含本轮入库）；17:30 不定时发 PDF；同日已推过则跳过
 
 手动：
 

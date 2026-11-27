@@ -143,7 +143,7 @@ SUMMARY_PREVIEW_SHARECODE = (os.getenv("SUMMARY_PREVIEW_SHARECODE") or "").strip
 
 # 知识库归档到 OSS（kb/）；KB_ARCHIVE_ENABLED=0 关闭
 OSS_KB_PREFIX = os.getenv("OSS_KB_PREFIX") or "kb/"
-# 每日要点 PDF（briefs/）；DAILY_BRIEF_ENABLED=0 关闭；北京 17:30 定时档后自动生成
+# 每日要点 PDF（briefs/）；DAILY_BRIEF_ENABLED=0 关闭；北京 18:00 轮巡后自动生成
 OSS_BRIEF_PREFIX = os.getenv("OSS_BRIEF_PREFIX") or "briefs/"
 
 # 公众号噪声：规则未命中时用分类模型复核是否属网安/AI 情报（见 classifier.exclusion_reason）
