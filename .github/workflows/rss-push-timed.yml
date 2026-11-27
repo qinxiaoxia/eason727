@@ -61,16 +61,12 @@ jobs:
           RSS_PUSH_MODE: scheduled
           # 与仅按时钟判断相比，显式标记「本轮为定时汇总」，延迟错过 slot 窗口时仍能走定时档逻辑
           PUSH_SCHEDULED_NOW: "1"
-          # 北京 17–18 点触发的定时档顺便出「每日要点」PDF（Zeabur 17:30）
+          # 每日要点 PDF 改在当天最后一轮（18:00 轮巡）生成，见 rss-push.yml
           GENERATE_DAILY_BRIEF: ${{ secrets.GENERATE_DAILY_BRIEF }}
         run: |
           cd rss-wechat-pusher
           cp config.example.py config.py
-          # 若 Secret 未设：按北京时间在 17:00–18:59 自动打开每日要点
-          HOUR=$(TZ=Asia/Shanghai date +%H)
-          if [ -z "$GENERATE_DAILY_BRIEF" ] && [ "$HOUR" = "17" -o "$HOUR" = "18" ]; then
-            export GENERATE_DAILY_BRIEF=1
-          fi
+          # 定时档不再自动出 PDF（避免 17:30 与 18:00 各发一份）
           python main.py
 
       - name: Commit pushed state

@@ -578,12 +578,45 @@ def generate_daily_brief(
             print(f"[每日要点] 未配置 OSS，已写本地 {local}", flush=True)
 
         if notify_wechat:
-            _notify_wechat_pdf(day, pdf_bytes)
+            if _already_notified_brief(conn, day):
+                print(f"[每日要点] {day} 今日已推过 PDF，跳过重复发送", flush=True)
+            else:
+                _notify_wechat_pdf(day, pdf_bytes)
+                _mark_brief_notified(conn, day)
 
         return result
     finally:
         if own_conn and conn is not None:
             conn.close()
+
+
+def _brief_notify_meta_key(day: str) -> str:
+    return f"daily_brief_notified:{day}"
+
+
+def _already_notified_brief(conn: sqlite3.Connection, day: str) -> bool:
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)")
+        row = conn.execute(
+            "SELECT v FROM meta WHERE k = ?", (_brief_notify_meta_key(day),)
+        ).fetchone()
+        return bool(row and (row[0] or "").strip())
+    except Exception:
+        return False
+
+
+def _mark_brief_notified(conn: sqlite3.Connection, day: str) -> None:
+    try:
+        from datetime import datetime
+
+        conn.execute("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)")
+        conn.execute(
+            "INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)",
+            (_brief_notify_meta_key(day), datetime.now().isoformat(timespec="seconds")),
+        )
+        conn.commit()
+    except Exception as e:
+        print(f"[每日要点] 记录已推送状态失败: {e}", flush=True)
 
 
 def _webhook_key(webhook: str) -> str:
@@ -651,15 +684,28 @@ def _notify_wechat_pdf(day: str, pdf_bytes: bytes) -> None:
             print(f"[每日要点] {name} PDF 推送失败: {e}", flush=True)
 
 
-def maybe_run_end_of_day_brief(slot, conn: sqlite3.Connection) -> None:
-    """定时档 17:30 结束后自动出 PDF；可用环境变量强制。"""
+def maybe_run_end_of_day_brief(slot, conn: sqlite3.Connection, mode: str = None) -> None:
+    """
+    每天最后一轮推送后再出 PDF。
+    - 优先：北京 18 点轮巡（mode=poll）结束后
+    - 或环境变量 GENERATE_DAILY_BRIEF=1 强制
+    不再在 17:30 定时档自动发送（避免与 18:00 各发一份）。
+    """
     force = (os.getenv("GENERATE_DAILY_BRIEF") or "").strip().lower() in (
         "1",
         "true",
         "yes",
         "on",
     )
-    if not force and slot != (17, 30):
+    try:
+        from zoneinfo import ZoneInfo
+        from datetime import datetime
+
+        hour = datetime.now(ZoneInfo("Asia/Shanghai")).hour
+    except Exception:
+        hour = -1
+    is_last_poll = (mode or "").strip().lower() == "poll" and hour == 18
+    if not force and not is_last_poll:
         return
     if (os.getenv("DAILY_BRIEF_ENABLED", "1") or "1").strip().lower() in (
         "0",

@@ -2061,7 +2061,7 @@ def main():
     except Exception as e:
         print(f"[知识库] {e}", flush=True)
 
-    # 每日要点 PDF：17:30 档或 --daily-brief / GENERATE_DAILY_BRIEF=1
+    # 每日要点 PDF：当天最后一轮（北京 18 点轮巡）或 --daily-brief / GENERATE_DAILY_BRIEF=1
     try:
         from daily_brief import generate_daily_brief, maybe_run_end_of_day_brief
 
@@ -2073,7 +2073,11 @@ def main():
         ):
             generate_daily_brief(conn=conn, notify_wechat="--no-notify" not in sys.argv)
         else:
-            maybe_run_end_of_day_brief(slot if mode == "scheduled" or force_timed_digest else None, conn)
+            maybe_run_end_of_day_brief(
+                slot if mode == "scheduled" or force_timed_digest else None,
+                conn,
+                mode=mode,
+            )
     except Exception as e:
         print(f"[每日要点] {e}", flush=True)
 

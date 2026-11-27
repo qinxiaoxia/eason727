@@ -62,9 +62,15 @@ jobs:
           # 强制轮巡：避免 12:00 等与定时档重叠时被 _get_run_mode 误判为 scheduled
           RSS_PUSH_MODE: poll
           PUSH_SCHEDULED_NOW: ""
+          GENERATE_DAILY_BRIEF: ${{ secrets.GENERATE_DAILY_BRIEF }}
         run: |
           cd rss-wechat-pusher
           cp config.example.py config.py
+          # 当天最后一轮推送（北京 18 点轮巡）结束后再出每日要点 PDF
+          HOUR=$(TZ=Asia/Shanghai date +%H)
+          if [ -z "$GENERATE_DAILY_BRIEF" ] && [ "$HOUR" = "18" ]; then
+            export GENERATE_DAILY_BRIEF=1
+          fi
           python main.py
 
       - name: Commit pushed state
